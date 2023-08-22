@@ -291,31 +291,30 @@ fn physics_torque(
 
     let mut total_torque = DVec3::default();
 
-    for (corner_a, corner_b) in data {
+    for (corner_a, _corner_b) in data {
         let force_sum_a: DVec3 = corner_a
             .into_iter()
             .map(|motor| forces.get(&motor).unwrap())
             .sum();
-        let force_sum_b: DVec3 = corner_b
-            .into_iter()
-            .map(|motor| forces.get(&motor).unwrap())
-            .sum();
-
         let corner_a_pos: DVec3 = corner_a
             .into_iter()
             .map(|motor| motor_conf_data.get(&motor).unwrap().position)
             .sum();
-        let corner_b_pos: DVec3 = corner_b
-            .into_iter()
-            .map(|motor| motor_conf_data.get(&motor).unwrap().position)
-            .sum();
 
-        dbg!(axis, force_sum_a, force_sum_b, corner_a_pos, corner_b_pos);
+        // We dont care about corner_b
+        // let force_sum_b: DVec3 = corner_b
+        //     .into_iter()
+        //     .map(|motor| forces.get(&motor).unwrap())
+        //     .sum();
+        // let corner_b_pos: DVec3 = corner_b
+        //     .into_iter()
+        //     .map(|motor| motor_conf_data.get(&motor).unwrap().position)
+        //     .sum();
 
         let force = force_sum_a * 2.0;
         let torque = corner_a_pos.cross(force);
 
-        total_torque += dbg!(torque);
+        total_torque += torque;
     }
 
     total_torque.length()
