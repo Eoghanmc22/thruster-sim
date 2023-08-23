@@ -11,12 +11,7 @@ pub mod motor_code;
 /// Models a possible varient of the symmetrical 3d X motor config
 #[derive(Clone, Copy, Debug)]
 pub struct MotorConfig {
-    /// FrontLeftTop
-    /// Radians
-    pub angle_xy: f64,
-    /// FrontLeftTop
-    /// Radians
-    pub angle_yz: f64,
+    pub seed: SeedAngle,
 
     /// Meters
     pub width: f64,
@@ -24,6 +19,19 @@ pub struct MotorConfig {
     pub length: f64,
     /// Meters
     pub height: f64,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum SeedAngle {
+    VecByTwoAngles {
+        /// FrontLeftTop
+        /// Radians
+        angle_xy: f64,
+        /// FrontLeftTop
+        /// Radians
+        angle_yz: f64,
+    },
+    Vec(DVec3),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -37,8 +45,7 @@ pub struct Motor {
 impl MotorConfig {
     pub fn compute_motors(&self) -> HashMap<MotorId, Motor> {
         let MotorConfig {
-            angle_xy,
-            angle_yz,
+            seed,
 
             width,
             length,
@@ -66,7 +73,10 @@ impl MotorConfig {
         ];
 
         let frt_position = dvec3(h_w, h_l, h_h);
-        let frt_orientation = vec_from_angles(angle_xy, angle_yz);
+        let frt_orientation = match seed {
+            SeedAngle::VecByTwoAngles { angle_xy, angle_yz } => vec_from_angles(angle_xy, angle_yz),
+            SeedAngle::Vec(vec) => vec,
+        };
 
         motors
             .into_iter()
@@ -121,7 +131,7 @@ pub fn vec_from_angles(angle_xy: f64, angle_yz: f64) -> DVec3 {
     dvec3(x, y, z)
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum PhysicsAxis {
     X,
     Y,

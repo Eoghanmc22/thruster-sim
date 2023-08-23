@@ -1,5 +1,8 @@
+use std::collections::BTreeMap;
+
 use bevy::{
     diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
+    math::dvec3,
     prelude::*,
     render::camera::ScalingMode,
 };
@@ -11,7 +14,7 @@ use bevy_panorbit_camera::{PanOrbitCamera, PanOrbitCameraPlugin};
 use random_math_test::{
     lines::{LineList, LineMaterial},
     motor_code::{self, MotorData, MotorId},
-    physics, Motor, MotorConfig,
+    physics, Motor, MotorConfig, SeedAngle,
 };
 
 fn main() {
@@ -46,10 +49,11 @@ fn setup(
     mut materials_line: ResMut<Assets<LineMaterial>>,
 ) {
     let motor_conf = MotorConfig {
-        // angle_xy: 45f64.to_radians(),
-        // angle_yz: -135f64.to_radians(),
-        angle_xy: 135f64.to_radians(),
-        angle_yz: 45f64.to_radians(),
+        // seed: SeedAngle::Vec(dvec3(0.25, -0.47, -0.85)),
+        seed: SeedAngle::VecByTwoAngles {
+            angle_xy: 135f64.to_radians(),
+            angle_yz: 45f64.to_radians(),
+        },
         width: 0.5,
         length: 0.7,
         height: 0.35,
@@ -95,25 +99,28 @@ fn render_gui(
     mut cameras: Query<&mut PanOrbitCamera>,
 ) {
     let response = egui::Window::new("Motor Config").show(contexts.ctx_mut(), |ui| {
-        ui.horizontal(|ui| {
-            let mut angle = motor_conf.0.angle_xy.to_degrees();
+        if let SeedAngle::VecByTwoAngles { angle_xy, angle_yz } = &mut motor_conf.0.seed {
+            ui.horizontal(|ui| {
+                let mut angle = angle_xy.to_degrees();
 
-            ui.label("angle_xy");
-            if ui.add(Slider::new(&mut angle, 0.0..=360.0)).changed() {
-                motor_conf.0.angle_xy = angle.to_radians();
-            }
-        });
-        ui.horizontal(|ui| {
-            let mut angle = motor_conf.0.angle_yz.to_degrees();
+                ui.label("angle_xy");
+                if ui.add(Slider::new(&mut angle, 0.0..=360.0)).changed() {
+                    *angle_xy = angle.to_radians();
+                }
+            });
+            ui.horizontal(|ui| {
+                let mut angle = angle_yz.to_degrees();
 
-            ui.label("angle_yz");
-            if ui.add(Slider::new(&mut angle, 0.0..=360.0)).changed() {
-                motor_conf.0.angle_yz = angle.to_radians();
-            }
-        });
+                ui.label("angle_yz");
+                if ui.add(Slider::new(&mut angle, 0.0..=360.0)).changed() {
+                    *angle_yz = angle.to_radians();
+                }
+            });
+        }
 
         let physics_result = physics(&motor_conf.0, &motor_data.0);
-        ui.label(format!("{physics_result:#?}"));
+        let physics_result: BTreeMap<_, _> = physics_result.into_iter().collect();
+        ui.label(format!("{physics_result:#.2?}"));
 
         ui.interact(
             ui.clip_rect(),
