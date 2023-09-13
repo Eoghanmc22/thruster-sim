@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use bevy::{
     diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
-    math::dvec3,
+    math::{dvec3, DQuat, DVec3},
     prelude::*,
     render::camera::ScalingMode,
 };
@@ -49,14 +49,20 @@ fn setup(
     mut materials_line: ResMut<Assets<LineMaterial>>,
 ) {
     let motor_conf = MotorConfig {
-        // seed: SeedAngle::Vec(dvec3(0.25, -0.47, -0.85)),
-        seed: SeedAngle::VecByTwoAngles {
-            angle_xy: 135f64.to_radians(),
-            angle_yz: 45f64.to_radians(),
-        },
-        width: 0.5,
-        length: 0.7,
-        height: 0.35,
+        seed: SeedAngle::Vec(dvec3(0.381, -0.530, 0.758).normalize()),
+        // seed: SeedAngle::Vec(dvec3(-0.448, 0.448, 0.773).normalize()),
+        // seed: SeedAngle::Vec(dvec3(-0.414, 0.414, 0.811).normalize()),
+        // seed: SeedAngle::Vec(
+        //     DQuat::from_euler(EulerRot::XZY, 45f64.to_radians(), -45f64.to_radians(), 0.0)
+        //         * DVec3::X,
+        // ),
+        // seed: SeedAngle::VecByTwoAngles {
+        //     angle_xy: 135f64.to_radians(),
+        //     angle_yz: 45f64.to_radians(),
+        // },
+        width: 0.325,
+        length: 0.355,
+        height: 0.241,
     };
     add_motor_conf(
         &motor_conf,

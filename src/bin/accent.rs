@@ -6,15 +6,17 @@ use random_math_test::{
     physics, MotorConfig, PhysicsAxis, PhysicsResult, SeedAngle,
 };
 
-const STEP: f64 = 0.005;
-const WIDTH: f64 = 0.5;
-const LENGTH: f64 = 0.7;
-const HEIGHT: f64 = 0.35;
+const STEP: f64 = 0.0005;
+// const STEP: f64 = 0.001;
+const SIMILARITY: f64 = 0.05;
+const WIDTH: f64 = 0.325;
+const LENGTH: f64 = 0.355;
+const HEIGHT: f64 = 0.241;
 
 fn main() {
     let motor_data = motor_code::read_motor_data().unwrap();
 
-    let mut points = fibonacci_sphere(500);
+    let mut points = fibonacci_sphere(10000);
     let mut solved_points = Vec::new();
     let mut counter = 0;
 
@@ -53,6 +55,7 @@ fn main() {
                 )),
             )
         })
+        .filter(|(_, score)| *score != f64::NEG_INFINITY)
         .collect_vec();
 
     scored_points.sort_by(|(_, score_a), (_, score_b)| f64::total_cmp(score_a, score_b).reverse());
@@ -61,12 +64,12 @@ fn main() {
     'outer: for (new_point, score) in scored_points {
         for (existing_point, _score) in &deduped_points {
             let delta = (new_point - *existing_point).length();
-            if delta < STEP * 2.0 {
+            if delta < SIMILARITY {
                 continue 'outer;
             }
 
             let delta = (-new_point - *existing_point).length();
-            if delta < STEP * 2.0 {
+            if delta < SIMILARITY {
                 continue 'outer;
             }
         }
@@ -75,7 +78,16 @@ fn main() {
     }
 
     for point in deduped_points.into_iter().take(5) {
-        println!("{point:.2?}");
+        let motor_config = MotorConfig {
+            seed: SeedAngle::Vec(point.0),
+            width: WIDTH,
+            length: LENGTH,
+            height: HEIGHT,
+        };
+
+        let result = physics(&motor_config, &motor_data);
+
+        println!("{point:+.3?}, {result:+.3?}");
     }
 }
 
@@ -129,10 +141,97 @@ fn accent_sphere(scale: f64, point: DVec3, motor_data: &MotorData) -> (DVec3, bo
         }
     }
 
-    (best.2, best.0 == 0)
+    (best.2, best.0 == 0 || best.1 == f64::NEG_INFINITY)
 }
 
+// fn score(result: &HashMap<PhysicsAxis, PhysicsResult>) -> f64 {
+//     let results: HashMap<PhysicsAxis, f64> = result
+//         .into_iter()
+//         .map(|(axis, result)| match result {
+//             PhysicsResult::Linear(value) | PhysicsResult::Torque(value) => (*axis, value.abs()),
+//         })
+//         .collect();
+//
+//     let mut kinda_sucks = 0.0;
+//
+//     for (axis, force) in &results {
+//         let min = match axis {
+//             PhysicsAxis::X | PhysicsAxis::Y | PhysicsAxis::Z => 2.0,
+//             PhysicsAxis::XRot | PhysicsAxis::YRot | PhysicsAxis::ZRot => 1.0,
+//         };
+//
+//         if *force < min {
+//             kinda_sucks -= f64::INFINITY;
+//         }
+//     }
+//
+//     // Importance constraints
+//     results[&PhysicsAxis::Y] * 2.0
+//         + results[&PhysicsAxis::Z] * 1.5
+//         + results[&PhysicsAxis::X] * 0.75
+//         + results[&PhysicsAxis::XRot] * 0.8
+//         + results[&PhysicsAxis::YRot] * 0.5
+//         + results[&PhysicsAxis::ZRot] * 0.75
+//
+//         // Similar constraints
+//         // - 100.0 * (results[&PhysicsAxis::Y] * 1.5 - results[&PhysicsAxis::Z]).abs()
+//         - 2.0 * (results[&PhysicsAxis::XRot] - results[&PhysicsAxis::YRot]).abs()
+//
+//         // Comparison constraints
+//         - 30.0 * (results[&PhysicsAxis::X] - results[&PhysicsAxis::Y]).max(0.0)
+//         - 30.0 * (results[&PhysicsAxis::Y] - results[&PhysicsAxis::Z]).max(0.0)
+//         - 30.0 * (results[&PhysicsAxis::ZRot] - results[&PhysicsAxis::XRot]).max(0.0)
+//         - 30.0 * (results[&PhysicsAxis::ZRot] - results[&PhysicsAxis::YRot]).max(0.0)
+//
+//         // Doesnt totally suck constraint
+//         + kinda_sucks
+// }
+
 fn score(result: &HashMap<PhysicsAxis, PhysicsResult>) -> f64 {
+    let mut avg_linear = 0.0;
+    let mut avg_torque = 0.0;
+    let mut min_linear = f64::INFINITY;
+    let mut min_torque = f64::INFINITY;
+
+    for result in result.values() {
+        match result {
+            PhysicsResult::Linear(val) => {
+                avg_linear += val / 3.0;
+                min_linear = min_linear.min(*val);
+            }
+            PhysicsResult::Torque(val) => {
+                avg_torque += val / 3.0;
+                min_torque = min_torque.min(*val);
+            }
+        }
+    }
+
+    let mut score_linear = 0.0;
+    let mut score_torque = 0.0;
+
+    for result in result.values() {
+        match result {
+            PhysicsResult::Linear(val) => score_linear += (val - avg_linear) * (val - avg_linear),
+            PhysicsResult::Torque(val) => score_torque += (val - avg_torque) * (val - avg_torque),
+        }
+    }
+
+    let torque_sucks = {
+        if min_torque < 1.2 {
+            f64::NEG_INFINITY
+        } else {
+            0.0
+        }
+    };
+
+    let linear_sucks = {
+        if min_linear < 3.0 {
+            f64::NEG_INFINITY
+        } else {
+            0.0
+        }
+    };
+
     let results: HashMap<PhysicsAxis, f64> = result
         .into_iter()
         .map(|(axis, result)| match result {
@@ -140,32 +239,10 @@ fn score(result: &HashMap<PhysicsAxis, PhysicsResult>) -> f64 {
         })
         .collect();
 
-    let mut kinda_sucks = 0.0;
-
-    for (_axis, force) in &results {
-        if *force < 2.0 {
-            kinda_sucks -= 100.0;
-        }
-    }
-
-    // Importance constraints
-    results[&PhysicsAxis::Y] * 2.0
-        + results[&PhysicsAxis::Z] * 1.33
-        + results[&PhysicsAxis::X] * 0.75
-        + results[&PhysicsAxis::XRot] * 0.8
-        + results[&PhysicsAxis::YRot] * 0.5
-        + results[&PhysicsAxis::ZRot] * 0.75
-
-        // Similar constraints
-        // - 100.0 * (results[&PhysicsAxis::Y] * 1.5 - results[&PhysicsAxis::Z]).abs()
-        - 2.0 * (results[&PhysicsAxis::XRot] - results[&PhysicsAxis::YRot]).abs()
-
-        // Comparison constraints
-        - 30.0 * (results[&PhysicsAxis::X] - results[&PhysicsAxis::Y]).max(0.0)
-        - 30.0 * (results[&PhysicsAxis::Y] - results[&PhysicsAxis::Z]).max(0.0)
-        - 30.0 * (results[&PhysicsAxis::ZRot] - results[&PhysicsAxis::XRot]).max(0.0)
-        - 30.0 * (results[&PhysicsAxis::ZRot] - results[&PhysicsAxis::YRot]).max(0.0)
-
-        // Doesnt totally suck constraint
-        + kinda_sucks
+    // -0.2 * (score_linear + score_torque).sqrt()
+    min_linear * 3.0 + min_torque * 4.0 + avg_linear * 1.5 + avg_torque * 25.0
+        - 3.0 * (results[&PhysicsAxis::X] - results[&PhysicsAxis::Y]).max(0.0)
+        - 3.0 * (results[&PhysicsAxis::Y] - results[&PhysicsAxis::Z]).max(0.0)
+        + torque_sucks
+        + linear_sucks
 }
