@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use bevy::math::{dvec3, DQuat, DVec3};
 use fxhash::FxHashMap as HashMap;
 use itertools::Itertools;
@@ -6,7 +8,7 @@ use random_math_test::{
     physics, MotorConfig, PhysicsAxis, PhysicsResult, SeedAngle,
 };
 
-const STEP: f64 = 0.0005;
+const STEP: f64 = 0.001;
 // const STEP: f64 = 0.001;
 const SIMILARITY: f64 = 0.05;
 const WIDTH: f64 = 0.325;
@@ -86,6 +88,7 @@ fn main() {
         };
 
         let result = physics(&motor_config, &motor_data);
+        let result: BTreeMap<_, _> = result.into_iter().collect();
 
         println!("{point:+.3?}, {result:+.3?}");
     }
@@ -119,6 +122,24 @@ fn accent_sphere(scale: f64, point: DVec3, motor_data: &MotorData) -> (DVec3, bo
         DQuat::from_rotation_y(-scale),
         DQuat::from_rotation_z(scale),
         DQuat::from_rotation_z(-scale),
+        DQuat::from_rotation_x(scale * 10.0),
+        DQuat::from_rotation_x(-scale * 10.0),
+        DQuat::from_rotation_y(scale * 10.0),
+        DQuat::from_rotation_y(-scale * 10.0),
+        DQuat::from_rotation_z(scale * 10.0),
+        DQuat::from_rotation_z(-scale * 10.0),
+        DQuat::from_rotation_x(scale / 10.0),
+        DQuat::from_rotation_x(-scale / 10.0),
+        DQuat::from_rotation_y(scale / 10.0),
+        DQuat::from_rotation_y(-scale / 10.0),
+        DQuat::from_rotation_z(scale / 10.0),
+        DQuat::from_rotation_z(-scale / 10.0),
+        DQuat::from_rotation_x(scale / 100.0),
+        DQuat::from_rotation_x(-scale / 100.0),
+        DQuat::from_rotation_y(scale / 100.0),
+        DQuat::from_rotation_y(-scale / 100.0),
+        DQuat::from_rotation_z(scale / 100.0),
+        DQuat::from_rotation_z(-scale / 100.0),
     ];
 
     let mut best = (0, f64::NEG_INFINITY, DVec3::ZERO);
@@ -138,6 +159,10 @@ fn accent_sphere(scale: f64, point: DVec3, motor_data: &MotorData) -> (DVec3, bo
 
         if score > best.1 {
             best = (idx, score, new_point);
+        }
+
+        if idx == 0 && score == f64::NEG_INFINITY {
+            return (DVec3::ZERO, true);
         }
     }
 
@@ -217,7 +242,7 @@ fn score(result: &HashMap<PhysicsAxis, PhysicsResult>) -> f64 {
     }
 
     let torque_sucks = {
-        if min_torque < 1.2 {
+        if min_torque < 0.5 {
             f64::NEG_INFINITY
         } else {
             0.0
@@ -225,7 +250,7 @@ fn score(result: &HashMap<PhysicsAxis, PhysicsResult>) -> f64 {
     };
 
     let linear_sucks = {
-        if min_linear < 3.0 {
+        if min_linear < 2.0 {
             f64::NEG_INFINITY
         } else {
             0.0
@@ -240,9 +265,24 @@ fn score(result: &HashMap<PhysicsAxis, PhysicsResult>) -> f64 {
         .collect();
 
     // -0.2 * (score_linear + score_torque).sqrt()
-    min_linear * 3.0 + min_torque * 4.0 + avg_linear * 1.5 + avg_torque * 25.0
-        - 3.0 * (results[&PhysicsAxis::X] - results[&PhysicsAxis::Y]).max(0.0)
-        - 3.0 * (results[&PhysicsAxis::Y] - results[&PhysicsAxis::Z]).max(0.0)
+    // results[&PhysicsAxis::Y] * 6.0
+    //     + results[&PhysicsAxis::Z] * 12.0
+    //     + results[&PhysicsAxis::X] * -1.0
+    //     + results[&PhysicsAxis::XRot] * 4.0
+    //     + results[&PhysicsAxis::YRot] * 4.0
+    //     + results[&PhysicsAxis::ZRot] * -1.0
+    0.0 + linear_sucks
         + torque_sucks
-        + linear_sucks
+        // + min_linear * 1.0
+        // + min_torque * 1.0
+        + avg_linear * 1.0
+        // + avg_torque * 1.0
+        + results[&PhysicsAxis::XRot] * 2.0
+        + results[&PhysicsAxis::YRot] * 2.0
+        - 30.0 * (results[&PhysicsAxis::X] - results[&PhysicsAxis::Y]).max(0.0)
+        - 30.0 * (results[&PhysicsAxis::Y] - results[&PhysicsAxis::Z]).max(0.0)
+        + 30.0 * (results[&PhysicsAxis::Y] - 4.5)
+    // + 30.0 * (results[&PhysicsAxis::Z] - 7.0)
+    // + 30.0 * (results[&PhysicsAxis::XRot] - 4.0)
+    // + 30.0 * (results[&PhysicsAxis::YRot] - 2.0)
 }

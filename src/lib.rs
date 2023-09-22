@@ -152,6 +152,9 @@ pub fn physics(
     motor_preformance_data: &MotorData,
 ) -> HashMap<PhysicsAxis, PhysicsResult> {
     // TODO: Derive from motor config
+    // Laterial is signum(orientation dot axis)
+    // Torque is signum((position cross orientation) dot axis)
+    // signum may not be correct for arbituary motor configs
     let motor_relations = &[
         (
             MotorId::FrontLeftBottom,
@@ -189,21 +192,21 @@ pub fn physics(
 
     // Why is axes the plural of axis
     let axes = &[
-        PhysicsAxis::X,
-        PhysicsAxis::Y,
-        PhysicsAxis::Z,
-        PhysicsAxis::XRot,
-        PhysicsAxis::YRot,
-        PhysicsAxis::ZRot,
+        (PhysicsAxis::X, DVec3::X),
+        (PhysicsAxis::Y, DVec3::Y),
+        (PhysicsAxis::Z, DVec3::Z),
+        (PhysicsAxis::XRot, DVec3::X),
+        (PhysicsAxis::YRot, DVec3::Y),
+        (PhysicsAxis::ZRot, DVec3::Z),
     ];
 
     let motor_conf_data = motor_config.compute_motors();
-    let (forwards, backwards) =
-        motor_code::calculate_relevant_thrust_limits(motor_preformance_data);
+    // TODO: Could just assume unit force
+    let (forwards, backwards) = motor_code::calculate_thrust_limits(motor_preformance_data);
 
     let mut results = HashMap::default();
 
-    for (axis_idx, axis) in axes.iter().enumerate() {
+    for (axis_idx, (axis, vector)) in axes.iter().enumerate() {
         let mut forces = HashMap::default();
 
         for (motor_id, relations) in motor_relations {
@@ -220,23 +223,17 @@ pub fn physics(
         }
 
         match axis {
-            PhysicsAxis::X => {
-                let value = physics_linear(DVec3::X, forces);
-
-                results.insert(*axis, PhysicsResult::Linear(value));
-            }
-            PhysicsAxis::Y => {
-                let value = physics_linear(DVec3::Y, forces);
-
-                results.insert(*axis, PhysicsResult::Linear(value));
-            }
-            PhysicsAxis::Z => {
-                let value = physics_linear(DVec3::Z, forces);
+            PhysicsAxis::X | PhysicsAxis::Y | PhysicsAxis::Z => {
+                let linear = physics_linear(forces);
+                // FIXME: abs call isnt needed once motor relations is calculated procedurally
+                let value = linear.dot(*vector).abs();
 
                 results.insert(*axis, PhysicsResult::Linear(value));
             }
             PhysicsAxis::XRot | PhysicsAxis::YRot | PhysicsAxis::ZRot => {
-                let value = physics_torque(*axis, &motor_conf_data, forces);
+                let torque = physics_torque(&motor_conf_data, forces);
+                // FIXME: abs call isnt needed once motor relations is calculated procedurally
+                let value = torque.dot(*vector).abs();
 
                 results.insert(*axis, PhysicsResult::Torque(value));
             }
@@ -246,86 +243,27 @@ pub fn physics(
     results
 }
 
-fn physics_linear(reference_vec: DVec3, forces: HashMap<MotorId, DVec3>) -> f64 {
-    let sum: DVec3 = forces.into_values().sum();
+fn physics_linear(forces: HashMap<MotorId, DVec3>) -> DVec3 {
+    let mut force_sum = DVec3::ZERO;
 
-    // FIXME: Get rid of abs call
-    sum.dot(reference_vec).abs()
+    for (motor, force) in forces {
+        force_sum += force;
+    }
+
+    force_sum
 }
 
 fn physics_torque(
-    axis: PhysicsAxis,
     motor_conf_data: &HashMap<MotorId, Motor>,
     forces: HashMap<MotorId, DVec3>,
-) -> f64 {
-    // TODO: Analyse the plane in the middle of the body perpendicular to the rotational axis
-    // Consider oppsite corners of the rectangle created by the intersection of this plane and the
-    // robot
-    // torque = position cross force (right hand rule)
+) -> DVec3 {
+    let mut torque_sum = DVec3::ZERO;
 
-    // TODO generate?
-    // Is this even right?
-    let data = match axis {
-        PhysicsAxis::XRot => [
-            (
-                [MotorId::FrontLeftTop, MotorId::FrontRightTop],
-                [MotorId::BackLeftBottom, MotorId::BackRightBottom],
-            ),
-            (
-                [MotorId::FrontLeftBottom, MotorId::FrontRightBottom],
-                [MotorId::BackLeftTop, MotorId::BackRightTop],
-            ),
-        ],
-        PhysicsAxis::YRot => [
-            (
-                [MotorId::FrontRightTop, MotorId::BackRightTop],
-                [MotorId::FrontLeftBottom, MotorId::BackLeftBottom],
-            ),
-            (
-                [MotorId::FrontLeftTop, MotorId::BackLeftTop],
-                [MotorId::FrontRightBottom, MotorId::BackRightBottom],
-            ),
-        ],
-        PhysicsAxis::ZRot => [
-            (
-                [MotorId::FrontRightTop, MotorId::FrontRightBottom],
-                [MotorId::BackLeftTop, MotorId::BackLeftBottom],
-            ),
-            (
-                [MotorId::FrontLeftTop, MotorId::FrontLeftBottom],
-                [MotorId::BackRightTop, MotorId::BackRightBottom],
-            ),
-        ],
-        _ => unreachable!(),
-    };
+    for (motor, force) in forces {
+        let position = motor_conf_data.get(&motor).unwrap().position;
 
-    let mut total_torque = DVec3::default();
-
-    for (corner_a, _corner_b) in data {
-        let force_sum_a: DVec3 = corner_a
-            .into_iter()
-            .map(|motor| forces.get(&motor).unwrap())
-            .sum();
-        let corner_a_pos: DVec3 = corner_a
-            .into_iter()
-            .map(|motor| motor_conf_data.get(&motor).unwrap().position)
-            .sum();
-
-        // We dont care about corner_b
-        // let force_sum_b: DVec3 = corner_b
-        //     .into_iter()
-        //     .map(|motor| forces.get(&motor).unwrap())
-        //     .sum();
-        // let corner_b_pos: DVec3 = corner_b
-        //     .into_iter()
-        //     .map(|motor| motor_conf_data.get(&motor).unwrap().position)
-        //     .sum();
-
-        let force = force_sum_a * 2.0;
-        let torque = corner_a_pos.cross(force);
-
-        total_torque += torque;
+        torque_sum += position.cross(force);
     }
 
-    total_torque.length()
+    torque_sum
 }

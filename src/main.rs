@@ -47,11 +47,10 @@ fn setup(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials_pbr: ResMut<Assets<StandardMaterial>>,
     mut materials_line: ResMut<Assets<LineMaterial>>,
+    mut motor_data: Res<MotorDataRes>,
 ) {
     let motor_conf = MotorConfig {
         seed: SeedAngle::Vec(dvec3(0.381, -0.530, 0.758).normalize()),
-        // seed: SeedAngle::Vec(dvec3(-0.448, 0.448, 0.773).normalize()),
-        // seed: SeedAngle::Vec(dvec3(-0.414, 0.414, 0.811).normalize()),
         // seed: SeedAngle::Vec(
         //     DQuat::from_euler(EulerRot::XZY, 45f64.to_radians(), -45f64.to_radians(), 0.0)
         //         * DVec3::X,
@@ -96,6 +95,11 @@ fn setup(
         },
         PanOrbitCamera::default(),
     ));
+
+    let result = physics(&motor_conf, &motor_data.0);
+    let result: BTreeMap<_, _> = result.into_iter().collect();
+
+    println!("{:+.3?}, {result:+.3?}", motor_conf.seed);
 }
 
 fn render_gui(

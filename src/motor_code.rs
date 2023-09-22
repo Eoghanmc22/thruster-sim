@@ -73,7 +73,7 @@ pub enum MotorId {
 /// when all motors are moving at max allowed speed
 ///
 /// Returns (forward, reverse) in kgf
-pub fn calculate_relevant_thrust_limits(motor_data: &MotorData) -> (f64, f64) {
+pub fn calculate_thrust_limits(motor_data: &MotorData) -> (f64, f64) {
     // max_amperage / total_desired
     let scale = 20.0 / (1.0 * 4.0 + 1.25 * 4.0);
 
