@@ -161,6 +161,7 @@ fn accent_sphere(scale: f64, point: DVec3, motor_data: &MotorData) -> (DVec3, bo
             best = (idx, score, new_point);
         }
 
+        // Only reachable on first iteration, used to cull search space
         if idx == 0 && score == f64::NEG_INFINITY {
             return (DVec3::ZERO, true);
         }
@@ -213,6 +214,7 @@ fn accent_sphere(scale: f64, point: DVec3, motor_data: &MotorData) -> (DVec3, bo
 // }
 
 fn score(result: &HashMap<PhysicsAxis, PhysicsResult>) -> f64 {
+    // Average and min
     let mut avg_linear = 0.0;
     let mut avg_torque = 0.0;
     let mut min_linear = f64::INFINITY;
@@ -231,16 +233,18 @@ fn score(result: &HashMap<PhysicsAxis, PhysicsResult>) -> f64 {
         }
     }
 
-    let mut score_linear = 0.0;
-    let mut score_torque = 0.0;
+    // Mean error squared
+    let mut mes_linear = 0.0;
+    let mut mes_torque = 0.0;
 
     for result in result.values() {
         match result {
-            PhysicsResult::Linear(val) => score_linear += (val - avg_linear) * (val - avg_linear),
-            PhysicsResult::Torque(val) => score_torque += (val - avg_torque) * (val - avg_torque),
+            PhysicsResult::Linear(val) => mes_linear += (val - avg_linear) * (val - avg_linear),
+            PhysicsResult::Torque(val) => mes_torque += (val - avg_torque) * (val - avg_torque),
         }
     }
 
+    // Minimums to cull search space
     let torque_sucks = {
         if min_torque < 0.5 {
             f64::NEG_INFINITY
@@ -257,6 +261,7 @@ fn score(result: &HashMap<PhysicsAxis, PhysicsResult>) -> f64 {
         }
     };
 
+    // Per axis values
     let results: HashMap<PhysicsAxis, f64> = result
         .into_iter()
         .map(|(axis, result)| match result {
@@ -264,25 +269,19 @@ fn score(result: &HashMap<PhysicsAxis, PhysicsResult>) -> f64 {
         })
         .collect();
 
-    // -0.2 * (score_linear + score_torque).sqrt()
-    // results[&PhysicsAxis::Y] * 6.0
-    //     + results[&PhysicsAxis::Z] * 12.0
-    //     + results[&PhysicsAxis::X] * -1.0
-    //     + results[&PhysicsAxis::XRot] * 4.0
-    //     + results[&PhysicsAxis::YRot] * 4.0
-    //     + results[&PhysicsAxis::ZRot] * -1.0
     0.0 + linear_sucks
         + torque_sucks
-        // + min_linear * 1.0
-        // + min_torque * 1.0
-        + avg_linear * 1.0
-        // + avg_torque * 1.0
-        + results[&PhysicsAxis::XRot] * 2.0
-        + results[&PhysicsAxis::YRot] * 2.0
-        - 30.0 * (results[&PhysicsAxis::X] - results[&PhysicsAxis::Y]).max(0.0)
-        - 30.0 * (results[&PhysicsAxis::Y] - results[&PhysicsAxis::Z]).max(0.0)
-        + 30.0 * (results[&PhysicsAxis::Y] - 4.5)
-    // + 30.0 * (results[&PhysicsAxis::Z] - 7.0)
-    // + 30.0 * (results[&PhysicsAxis::XRot] - 4.0)
-    // + 30.0 * (results[&PhysicsAxis::YRot] - 2.0)
+        // + min_linear * 0.5
+        // + min_torque * 2.5
+        // + avg_linear * 1.0
+        // + avg_torque * 2.0
+        + results[&PhysicsAxis::X] * -1.0
+        + results[&PhysicsAxis::Z] * 2.0
+        + results[&PhysicsAxis::Y] * 1.0
+        + results[&PhysicsAxis::XRot] * 4.0
+        + results[&PhysicsAxis::ZRot] * 4.0
+        + results[&PhysicsAxis::YRot] * -3.0
+    // - 30.0 * (results[&PhysicsAxis::X] - results[&PhysicsAxis::Y]).max(0.0)
+    // - 30.0 * (results[&PhysicsAxis::Y] - results[&PhysicsAxis::Z]).max(0.0)
+    // + 30.0 * (results[&PhysicsAxis::Y] - 4.5)
 }
