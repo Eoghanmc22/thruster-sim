@@ -1,30 +1,26 @@
 use std::collections::BTreeMap;
 
-use bevy::math::{dvec3, DQuat, DVec3};
-use fxhash::FxHashMap as HashMap;
+use ahash::HashMap;
+use bevy::math::{vec3a, Quat, Vec3A};
 use itertools::Itertools;
-use random_math_test::{
-    motor_code::{self, MotorData},
-    physics, MotorConfig, PhysicsAxis, PhysicsResult, SeedAngle,
-};
+use motor_math::{x3d::X3dMotorId, Direction, Motor, MotorConfig};
+use random_math_test::{physics, PhysicsAxis, PhysicsResult};
 
-const STEP: f64 = 0.001;
+const STEP: f32 = 0.001;
 // const STEP: f64 = 0.001;
-const SIMILARITY: f64 = 0.05;
-const WIDTH: f64 = 0.325;
-const LENGTH: f64 = 0.355;
-const HEIGHT: f64 = 0.241;
+const SIMILARITY: f32 = 0.05;
+const WIDTH: f32 = 0.325;
+const LENGTH: f32 = 0.355;
+const HEIGHT: f32 = 0.241;
 
 fn main() {
-    let motor_data = motor_code::read_motor_data().unwrap();
-
-    let mut points = fibonacci_sphere(10000);
+    let mut points = fibonacci_sphere(1000);
     let mut solved_points = Vec::new();
     let mut counter = 0;
 
     while !points.is_empty() {
         points.retain_mut(|point| {
-            let (new_point, solved) = accent_sphere(STEP, *point, &motor_data);
+            let (new_point, solved) = accent_sphere(STEP, *point);
 
             if solved {
                 solved_points.push(new_point);
@@ -46,23 +42,19 @@ fn main() {
         .map(|point| {
             (
                 point,
-                score(&physics(
-                    &MotorConfig {
-                        seed: SeedAngle::Vec(point),
-                        width: WIDTH,
-                        length: LENGTH,
-                        height: HEIGHT,
-                    },
-                    &motor_data,
-                )),
+                score(&physics(&MotorConfig::<X3dMotorId>::new(Motor {
+                    orientation: point,
+                    position: vec3a(WIDTH / 2.0, LENGTH / 2.0, HEIGHT / 2.0),
+                    direction: Direction::Clockwise,
+                }))),
             )
         })
-        .filter(|(_, score)| *score != f64::NEG_INFINITY)
+        .filter(|(_, score)| *score != f32::NEG_INFINITY)
         .collect_vec();
 
-    scored_points.sort_by(|(_, score_a), (_, score_b)| f64::total_cmp(score_a, score_b).reverse());
+    scored_points.sort_by(|(_, score_a), (_, score_b)| f32::total_cmp(score_a, score_b).reverse());
 
-    let mut deduped_points: Vec<(DVec3, f64)> = Vec::new();
+    let mut deduped_points: Vec<(Vec3A, f32)> = Vec::new();
     'outer: for (new_point, score) in scored_points {
         for (existing_point, _score) in &deduped_points {
             let delta = (new_point - *existing_point).length();
@@ -80,81 +72,79 @@ fn main() {
     }
 
     for point in deduped_points.into_iter().take(5) {
-        let motor_config = MotorConfig {
-            seed: SeedAngle::Vec(point.0),
-            width: WIDTH,
-            length: LENGTH,
-            height: HEIGHT,
-        };
+        let motor_config = MotorConfig::<X3dMotorId>::new(Motor {
+            orientation: point.0,
+            position: vec3a(WIDTH / 2.0, LENGTH / 2.0, HEIGHT / 2.0),
+            direction: Direction::Clockwise,
+        });
 
-        let result = physics(&motor_config, &motor_data);
+        let result = physics(&motor_config);
         let result: BTreeMap<_, _> = result.into_iter().collect();
 
         println!("{point:+.3?}, {result:+.3?}");
     }
 }
 
-fn fibonacci_sphere(samples: usize) -> Vec<DVec3> {
+fn fibonacci_sphere(samples: usize) -> Vec<Vec3A> {
     let mut points = Vec::new();
-    let phi = std::f64::consts::PI * (5f64.sqrt() - 1.0); // golden angle in radians
+    let phi = std::f32::consts::PI * (5f32.sqrt() - 1.0); // golden angle in radians
 
     for i in 0..samples {
-        let y = 1.0 - (i as f64 / (samples as f64 - 1.0)) * 2.0; // y goes from 1 to -1
+        let y = 1.0 - (i as f32 / (samples as f32 - 1.0)) * 2.0; // y goes from 1 to -1
         let radius = (1.0 - y * y).sqrt(); // radius at y
 
-        let theta = phi * i as f64; // golden angle increment
+        let theta = phi * i as f32; // golden angle increment
 
         let x = theta.cos() * radius;
         let z = theta.sin() * radius;
 
-        points.push(dvec3(x, y, z));
+        points.push(vec3a(x, y, z));
     }
 
     points
 }
 
-fn accent_sphere(scale: f64, point: DVec3, motor_data: &MotorData) -> (DVec3, bool) {
+fn accent_sphere(scale: f32, point: Vec3A) -> (Vec3A, bool) {
     let steps = [
-        DQuat::IDENTITY,
-        DQuat::from_rotation_x(scale),
-        DQuat::from_rotation_x(-scale),
-        DQuat::from_rotation_y(scale),
-        DQuat::from_rotation_y(-scale),
-        DQuat::from_rotation_z(scale),
-        DQuat::from_rotation_z(-scale),
-        DQuat::from_rotation_x(scale * 10.0),
-        DQuat::from_rotation_x(-scale * 10.0),
-        DQuat::from_rotation_y(scale * 10.0),
-        DQuat::from_rotation_y(-scale * 10.0),
-        DQuat::from_rotation_z(scale * 10.0),
-        DQuat::from_rotation_z(-scale * 10.0),
-        DQuat::from_rotation_x(scale / 10.0),
-        DQuat::from_rotation_x(-scale / 10.0),
-        DQuat::from_rotation_y(scale / 10.0),
-        DQuat::from_rotation_y(-scale / 10.0),
-        DQuat::from_rotation_z(scale / 10.0),
-        DQuat::from_rotation_z(-scale / 10.0),
-        DQuat::from_rotation_x(scale / 100.0),
-        DQuat::from_rotation_x(-scale / 100.0),
-        DQuat::from_rotation_y(scale / 100.0),
-        DQuat::from_rotation_y(-scale / 100.0),
-        DQuat::from_rotation_z(scale / 100.0),
-        DQuat::from_rotation_z(-scale / 100.0),
+        Quat::IDENTITY,
+        Quat::from_rotation_x(scale),
+        Quat::from_rotation_x(-scale),
+        Quat::from_rotation_y(scale),
+        Quat::from_rotation_y(-scale),
+        Quat::from_rotation_z(scale),
+        Quat::from_rotation_z(-scale),
+        Quat::from_rotation_x(scale * 10.0),
+        Quat::from_rotation_x(-scale * 10.0),
+        Quat::from_rotation_y(scale * 10.0),
+        Quat::from_rotation_y(-scale * 10.0),
+        Quat::from_rotation_z(scale * 10.0),
+        Quat::from_rotation_z(-scale * 10.0),
+        Quat::from_rotation_x(scale / 10.0),
+        Quat::from_rotation_x(-scale / 10.0),
+        Quat::from_rotation_y(scale / 10.0),
+        Quat::from_rotation_y(-scale / 10.0),
+        Quat::from_rotation_z(scale / 10.0),
+        Quat::from_rotation_z(-scale / 10.0),
+        Quat::from_rotation_x(scale / 100.0),
+        Quat::from_rotation_x(-scale / 100.0),
+        Quat::from_rotation_y(scale / 100.0),
+        Quat::from_rotation_y(-scale / 100.0),
+        Quat::from_rotation_z(scale / 100.0),
+        Quat::from_rotation_z(-scale / 100.0),
     ];
 
-    let mut best = (0, f64::NEG_INFINITY, DVec3::ZERO);
+    let mut best = (0, f32::NEG_INFINITY, Vec3A::ZERO);
 
     for (idx, step) in steps.into_iter().enumerate() {
         let new_point = step * point;
 
-        let motor_config = MotorConfig {
-            seed: SeedAngle::Vec(new_point),
-            width: WIDTH,
-            length: LENGTH,
-            height: HEIGHT,
-        };
+        let motor_config = MotorConfig::<X3dMotorId>::new(Motor {
+            orientation: new_point,
+            position: vec3a(WIDTH / 2.0, LENGTH / 2.0, HEIGHT / 2.0),
+            direction: Direction::Clockwise,
+        });
 
-        let result = physics(&motor_config, motor_data);
+        let result = physics(&motor_config);
         let score = score(&result);
 
         if score > best.1 {
@@ -162,12 +152,12 @@ fn accent_sphere(scale: f64, point: DVec3, motor_data: &MotorData) -> (DVec3, bo
         }
 
         // Only reachable on first iteration, used to cull search space
-        if idx == 0 && score == f64::NEG_INFINITY {
-            return (DVec3::ZERO, true);
+        if idx == 0 && score == f32::NEG_INFINITY {
+            return (Vec3A::ZERO, true);
         }
     }
 
-    (best.2, best.0 == 0 || best.1 == f64::NEG_INFINITY)
+    (best.2, best.0 == 0 || best.1 == f32::NEG_INFINITY)
 }
 
 // fn score(result: &HashMap<PhysicsAxis, PhysicsResult>) -> f64 {
@@ -213,12 +203,12 @@ fn accent_sphere(scale: f64, point: DVec3, motor_data: &MotorData) -> (DVec3, bo
 //         + kinda_sucks
 // }
 
-fn score(result: &HashMap<PhysicsAxis, PhysicsResult>) -> f64 {
+fn score(result: &HashMap<PhysicsAxis, PhysicsResult>) -> f32 {
     // Average and min
     let mut avg_linear = 0.0;
     let mut avg_torque = 0.0;
-    let mut min_linear = f64::INFINITY;
-    let mut min_torque = f64::INFINITY;
+    let mut min_linear = f32::INFINITY;
+    let mut min_torque = f32::INFINITY;
 
     for result in result.values() {
         match result {
@@ -246,41 +236,42 @@ fn score(result: &HashMap<PhysicsAxis, PhysicsResult>) -> f64 {
 
     // Minimums to cull search space
     let torque_sucks = {
-        if min_torque < 0.5 {
-            f64::NEG_INFINITY
+        if min_torque < 0.2 {
+            f32::NEG_INFINITY
         } else {
             0.0
         }
     };
 
     let linear_sucks = {
-        if min_linear < 2.0 {
-            f64::NEG_INFINITY
+        if min_linear < 0.5 {
+            f32::NEG_INFINITY
         } else {
             0.0
         }
     };
 
     // Per axis values
-    let results: HashMap<PhysicsAxis, f64> = result
+    let results: HashMap<PhysicsAxis, f32> = result
         .into_iter()
         .map(|(axis, result)| match result {
             PhysicsResult::Linear(value) | PhysicsResult::Torque(value) => (*axis, value.abs()),
         })
         .collect();
 
-    0.0 + linear_sucks
-        + torque_sucks
+    0.0 
+        - mes_linear
+        - mes_torque
         // + min_linear * 0.5
         // + min_torque * 2.5
         // + avg_linear * 1.0
         // + avg_torque * 2.0
-        + results[&PhysicsAxis::X] * -1.0
-        + results[&PhysicsAxis::Z] * 2.0
+        + results[&PhysicsAxis::X] * 1.0
+        + results[&PhysicsAxis::Z] * 1.0
         + results[&PhysicsAxis::Y] * 1.0
-        + results[&PhysicsAxis::XRot] * 4.0
-        + results[&PhysicsAxis::ZRot] * 4.0
-        + results[&PhysicsAxis::YRot] * -3.0
+        // + results[&PhysicsAxis::XRot] * 4.0
+        // + results[&PhysicsAxis::ZRot] * 4.0
+        // + results[&PhysicsAxis::YRot] * -3.0
     // - 30.0 * (results[&PhysicsAxis::X] - results[&PhysicsAxis::Y]).max(0.0)
     // - 30.0 * (results[&PhysicsAxis::Y] - results[&PhysicsAxis::Z]).max(0.0)
     // + 30.0 * (results[&PhysicsAxis::Y] - 4.5)
