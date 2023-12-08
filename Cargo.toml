@@ -13,7 +13,31 @@ serde = { version = "1", features = ["derive"] }
 itertools = "0.11"
 
 # bevy = { version = "0.12", default-features = false, features = ["animation", "bevy_asset", "bevy_gilrs", "bevy_scene", "bevy_winit", "bevy_core_pipeline", "bevy_pbr", "bevy_gltf", "bevy_render", "multi-threaded", "filesystem_watcher", "wayland", "webgl2", "tonemapping_luts", "ktx2", "zstd", "default_font", "dynamic_linking"] }
-bevy = { version = "0.12", features = ["wayland", "dynamic_linking"] }
+bevy = { version = "0.12", default-features = false, features = [
+  "wayland",
+  "dynamic_linking",
+  "animation",
+  "bevy_asset",
+  "bevy_gilrs",
+  "bevy_scene",
+  "bevy_winit",
+  "bevy_core_pipeline",
+  "bevy_pbr",
+  "bevy_gltf",
+  "bevy_render",
+  "bevy_sprite",
+  "bevy_text",
+  "bevy_ui",
+  "multi-threaded",
+  "png",
+  "hdr",
+  "vorbis",
+  "bevy_gizmos",
+  "android_shared_stdcxx",
+  "tonemapping_luts",
+  "default_font",
+  "webgl2"
+] }
 bevy_panorbit_camera = "0.9"
 bevy_egui = "0.23"
 

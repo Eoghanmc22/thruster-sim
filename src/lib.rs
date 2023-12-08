@@ -1,4 +1,5 @@
 pub mod heuristic;
+pub mod optimize;
 
 use ahash::HashMap;
 use bevy::math::Vec3A;
@@ -7,6 +8,10 @@ use motor_math::{
     x3d::X3dMotorId,
     MotorConfig, Movement,
 };
+
+pub const WIDTH: f32 = 0.325;
+pub const LENGTH: f32 = 0.355;
+pub const HEIGHT: f32 = 0.241;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum PhysicsAxis {

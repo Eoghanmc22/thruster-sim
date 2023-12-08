@@ -2,7 +2,41 @@ use ahash::HashMap;
 
 use crate::{PhysicsAxis, PhysicsResult};
 
-pub fn score(result: &HashMap<PhysicsAxis, PhysicsResult>) -> f32 {
+pub struct ScoreSettings {
+    mes_linear: f32,
+    mes_torque: f32,
+    avg_linear: f32,
+    avg_torque: f32,
+    min_linear: f32,
+    min_torque: f32,
+    x: f32,
+    y: f32,
+    z: f32,
+    x_rot: f32,
+    y_rot: f32,
+    z_rot: f32,
+}
+
+impl Default for ScoreSettings {
+    fn default() -> Self {
+        Self {
+            mes_linear: -1.0,
+            mes_torque: -1.0,
+            avg_linear: 0.0,
+            avg_torque: 0.0,
+            min_linear: 0.0,
+            min_torque: 0.0,
+            x: 1.0,
+            y: 1.0,
+            z: 1.0,
+            x_rot: 0.0,
+            y_rot: 0.0,
+            z_rot: 0.0,
+        }
+    }
+}
+
+pub fn score(result: &HashMap<PhysicsAxis, PhysicsResult>, settings: &ScoreSettings) -> f32 {
     // Average and min
     let mut avg_linear = 0.0;
     let mut avg_torque = 0.0;
@@ -52,25 +86,24 @@ pub fn score(result: &HashMap<PhysicsAxis, PhysicsResult>) -> f32 {
 
     // Per axis values
     let results: HashMap<PhysicsAxis, f32> = result
-        .into_iter()
+        .iter()
         .map(|(axis, result)| match result {
             PhysicsResult::Linear(value) | PhysicsResult::Torque(value) => (*axis, value.abs()),
         })
         .collect();
 
-    0.0 
-        - mes_linear
-        - mes_torque
-        // + min_linear * 0.5
-        // + min_torque * 2.5
-        // + avg_linear * 1.0
-        // + avg_torque * 2.0
-        + results[&PhysicsAxis::X] * 1.0
-        + results[&PhysicsAxis::Z] * 1.0
-        + results[&PhysicsAxis::Y] * 1.0
-        // + results[&PhysicsAxis::XRot] * 4.0
-        // + results[&PhysicsAxis::ZRot] * 4.0
-        // + results[&PhysicsAxis::YRot] * -3.0
+    0.0 + mes_linear * settings.mes_linear
+        + mes_torque * settings.mes_torque
+        + min_linear * settings.min_linear
+        + min_torque * settings.min_torque
+        + avg_linear * settings.avg_linear
+        + avg_torque * settings.avg_torque
+        + results[&PhysicsAxis::X] * settings.x
+        + results[&PhysicsAxis::Z] * settings.y
+        + results[&PhysicsAxis::Y] * settings.z
+        + results[&PhysicsAxis::XRot] * settings.x_rot
+        + results[&PhysicsAxis::ZRot] * settings.y_rot
+        + results[&PhysicsAxis::YRot] * settings.z_rot
     // - 30.0 * (results[&PhysicsAxis::X] - results[&PhysicsAxis::Y]).max(0.0)
     // - 30.0 * (results[&PhysicsAxis::Y] - results[&PhysicsAxis::Z]).max(0.0)
     // + 30.0 * (results[&PhysicsAxis::Y] - 4.5)

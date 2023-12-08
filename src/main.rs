@@ -24,11 +24,7 @@ use motor_math::{
     x3d::X3dMotorId,
     Direction, Motor, MotorConfig, Movement,
 };
-use random_math_test::{heuristic, physics};
-
-const WIDTH: f32 = 0.325 * 2.0;
-const LENGTH: f32 = 0.355 * 2.0;
-const HEIGHT: f32 = 0.241 * 2.0;
+use random_math_test::{heuristic, physics, HEIGHT, LENGTH, WIDTH};
 
 fn main() {
     App::new()
@@ -526,7 +522,7 @@ fn make_heuristic_meshes() -> (Mesh, Mesh) {
         });
 
         let physics = physics(&motor_config);
-        let score = heuristic::score(&physics);
+        let score = heuristic::score(&physics, &Default::default());
 
         score.clamp(0.0, 10.0) * 0.3
     });
@@ -539,7 +535,7 @@ fn make_heuristic_meshes() -> (Mesh, Mesh) {
         });
 
         let physics = physics(&motor_config);
-        let score = heuristic::score(&physics);
+        let score = heuristic::score(&physics, &Default::default());
 
         score.clamp(-10.0, 0.0).abs() * 0.3
     });
