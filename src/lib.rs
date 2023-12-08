@@ -1,4 +1,4 @@
-pub mod lines;
+pub mod heuristic;
 
 use ahash::HashMap;
 use bevy::math::Vec3A;
@@ -77,7 +77,7 @@ pub fn physics(motor_config: &MotorConfig<X3dMotorId>) -> HashMap<PhysicsAxis, P
         let mut forces = reverse::reverse_solve(movement, motor_config);
 
         let force_length = forces.values().map(|it| it * it).sum::<f32>();
-        let adjustment = 1.0 / force_length;
+        let adjustment = 1.0 / force_length.sqrt();
         forces.values_mut().for_each(|it| *it *= adjustment);
 
         let adjusted_movement = forward::forward_solve(motor_config, &forces);
