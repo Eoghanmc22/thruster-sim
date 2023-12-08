@@ -14,7 +14,7 @@ use bevy::{
     window::{PrimaryWindow, WindowResized, WindowResolution},
 };
 use bevy_egui::{
-    egui::{self, Sense},
+    egui::{self, Sense, Slider},
     EguiContexts, EguiPlugin,
 };
 use bevy_panorbit_camera::{PanOrbitCamera, PanOrbitCameraPlugin};
@@ -24,7 +24,11 @@ use motor_math::{
     x3d::X3dMotorId,
     Direction, Motor, MotorConfig, Movement,
 };
-use random_math_test::{heuristic, physics, HEIGHT, LENGTH, WIDTH};
+use random_math_test::{
+    heuristic::{self, ScoreSettings},
+    optimize::{accent_sphere, fibonacci_sphere},
+    physics, HEIGHT, LENGTH, WIDTH,
+};
 
 fn main() {
     App::new()
@@ -39,6 +43,7 @@ fn main() {
             render_layers: RenderLayers::all(),
             ..default()
         })
+        .insert_resource(ScoreSettingsRes(ScoreSettings::default()))
         .add_systems(Startup, setup)
         .add_systems(
             Update,
@@ -47,6 +52,8 @@ fn main() {
                 update_motor_conf,
                 set_camera_viewports,
                 sync_cameras,
+                handle_heuristic_change,
+                step_accent_points,
             ),
         )
         .run();
@@ -54,8 +61,26 @@ fn main() {
 
 #[derive(Resource)]
 struct MotorConfigRes(MotorConfig<X3dMotorId>);
+#[derive(Resource)]
+struct ScoreSettingsRes(ScoreSettings);
 #[derive(Component)]
-struct MotorMarker(X3dMotorId);
+struct MotorMarker(X3dMotorId, bool);
+#[derive(Component)]
+enum HeuristicMesh {
+    Positive,
+    Negative,
+}
+#[derive(Component, Clone, Copy)]
+enum StrengthMesh {
+    Force,
+    Torque,
+}
+
+#[derive(Component)]
+struct AccentPoint(Vec3A, bool);
+
+#[derive(Component)]
+struct CurrentConfig;
 
 #[derive(Component)]
 enum CameraPos {
@@ -99,6 +124,7 @@ fn setup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials_pbr: ResMut<Assets<StandardMaterial>>,
+    score_settings: Res<ScoreSettingsRes>,
     asset_server: Res<AssetServer>,
 ) {
     let motor_handle = asset_server.load("t200.gltf#Scene0");
@@ -210,7 +236,7 @@ fn setup(
         CameraPos::LeftBottom,
     ));
 
-    let (positive, negative) = make_heuristic_meshes();
+    let (positive, negative) = make_heuristic_meshes(&score_settings.0);
 
     commands.spawn((
         PbrBundle {
@@ -219,6 +245,7 @@ fn setup(
             transform: Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians())),
             ..default()
         },
+        HeuristicMesh::Positive,
         RenderLayers::layer(3),
     ));
 
@@ -229,6 +256,7 @@ fn setup(
             transform: Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians())),
             ..default()
         },
+        HeuristicMesh::Negative,
         RenderLayers::layer(3),
     ));
 
@@ -239,11 +267,46 @@ fn setup(
         "{:+.3?}, {result:+.3?}",
         motor_conf.motor(&X3dMotorId::FrontRightTop)
     );
+
+    let sphere_points = fibonacci_sphere(1000);
+    for point in sphere_points {
+        commands.spawn((
+            PbrBundle {
+                mesh: meshes.add(
+                    shape::Icosphere {
+                        radius: 0.01,
+                        subdivisions: 1,
+                    }
+                    .try_into()
+                    .unwrap(),
+                ),
+                material: materials_pbr.add(Color::WHITE.into()),
+                transform: Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians()))
+                    * Transform::from_translation(
+                        (point.normalize()
+                            * heuristic::score(
+                                &physics(&MotorConfig::<X3dMotorId>::new(Motor {
+                                    position: vec3a(WIDTH, LENGTH, HEIGHT) / 2.0,
+                                    orientation: point.normalize(),
+                                    direction: Direction::Clockwise,
+                                })),
+                                &Default::default(),
+                            )
+                            * 0.3)
+                            .into(),
+                    ),
+                ..default()
+            },
+            AccentPoint(point, false),
+            RenderLayers::layer(3),
+        ));
+    }
 }
 
 fn render_gui(
     mut contexts: EguiContexts,
     mut motor_conf: ResMut<MotorConfigRes>,
+    mut solver: ResMut<ScoreSettingsRes>,
     mut cameras: Query<&mut PanOrbitCamera>,
 ) {
     let response = egui::Window::new("Motor Config").show(contexts.ctx_mut(), |ui| {
@@ -265,10 +328,103 @@ fn render_gui(
         //         }
         //     });
         // }
+        ui.group(|ui| {
+            let mut settings = solver.0.clone();
 
-        let physics_result = physics(&motor_conf.0);
-        let physics_result: BTreeMap<_, _> = physics_result.into_iter().collect();
-        ui.label(format!("{physics_result:#.2?}"));
+            ui.heading("Optimization Goals");
+
+            let mut updated = false;
+
+            ui.horizontal(|ui| {
+                ui.label("MES Linear");
+                updated |= ui
+                    .add(Slider::new(&mut settings.mes_linear, -1.0..=1.0))
+                    .changed();
+            });
+
+            ui.horizontal(|ui| {
+                ui.label("MES Torque");
+                updated |= ui
+                    .add(Slider::new(&mut settings.mes_torque, -1.0..=1.0))
+                    .changed();
+            });
+
+            ui.horizontal(|ui| {
+                ui.label("Min Linear");
+                updated |= ui
+                    .add(Slider::new(&mut settings.min_linear, -1.0..=1.0))
+                    .changed();
+            });
+
+            ui.horizontal(|ui| {
+                ui.label("Min Torque");
+                updated |= ui
+                    .add(Slider::new(&mut settings.min_torque, -1.0..=1.0))
+                    .changed();
+            });
+
+            ui.horizontal(|ui| {
+                ui.label("Avg Linear");
+                updated |= ui
+                    .add(Slider::new(&mut settings.avg_linear, -1.0..=1.0))
+                    .changed();
+            });
+
+            ui.horizontal(|ui| {
+                ui.label("Avg Torque");
+                updated |= ui
+                    .add(Slider::new(&mut settings.avg_torque, -1.0..=1.0))
+                    .changed();
+            });
+
+            ui.horizontal(|ui| {
+                ui.label("X");
+                updated |= ui.add(Slider::new(&mut settings.x, -1.0..=1.0)).changed();
+            });
+
+            ui.horizontal(|ui| {
+                ui.label("Y");
+                updated |= ui.add(Slider::new(&mut settings.y, -1.0..=1.0)).changed();
+            });
+
+            ui.horizontal(|ui| {
+                ui.label("Z");
+                updated |= ui.add(Slider::new(&mut settings.z, -1.0..=1.0)).changed();
+            });
+
+            ui.horizontal(|ui| {
+                ui.label("X ROT");
+                updated |= ui
+                    .add(Slider::new(&mut settings.x_rot, -1.0..=1.0))
+                    .changed();
+            });
+
+            ui.horizontal(|ui| {
+                ui.label("Y ROT");
+                updated |= ui
+                    .add(Slider::new(&mut settings.y_rot, -1.0..=1.0))
+                    .changed();
+            });
+
+            ui.horizontal(|ui| {
+                ui.label("Z ROT");
+                updated |= ui
+                    .add(Slider::new(&mut settings.z_rot, -1.0..=1.0))
+                    .changed();
+            });
+
+            if updated {
+                solver.0 = settings;
+            }
+        });
+
+        ui.group(|ui| {
+            ui.heading("Physics Result");
+
+            let physics_result = physics(&motor_conf.0);
+            let physics_result: BTreeMap<_, _> = physics_result.into_iter().collect();
+            ui.label(format!("{physics_result:#.2?}"));
+        });
 
         ui.interact(
             ui.clip_rect(),
@@ -294,28 +450,48 @@ fn render_gui(
 
 fn update_motor_conf(
     motor_conf: ResMut<MotorConfigRes>,
-    mut motors_query: Query<(&MotorMarker)>,
+    score_settings: Res<ScoreSettingsRes>,
+    mut motors_query: Query<(&MotorMarker, &mut Transform)>,
     mut meshes: ResMut<Assets<Mesh>>,
+    mesh_query: Query<(&Handle<Mesh>, &StrengthMesh)>,
+    mut highlight_query: Query<&mut Transform, (With<CurrentConfig>, Without<MotorMarker>)>,
     mut gizmos: Gizmos,
-    time: Res<Time>,
 ) {
-    // if motor_conf.is_changed() {
-    for (motor_id) in motors_query.iter_mut() {
-        let motor = motor_conf.0.motor(&motor_id.0).unwrap();
+    if motor_conf.is_changed() {
+        for (motor_id, mut transform) in motors_query.iter_mut() {
+            let motor = motor_conf.0.motor(&motor_id.0).unwrap();
 
-        // *mesh = meshes.add(Mesh::from(LineList {
-        //     lines: vec![(
-        //         motor.position.into(),
-        //         (motor.position + motor.orientation).into(),
-        //     )],
-        // }));
+            if motor_id.1 {
+                *transform = Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians()))
+                    * Transform::from_translation(
+                        (motor.position + motor.orientation / 2.0).into(),
+                    )
+                    .looking_to(motor.orientation.into(), (-motor.position).into())
+                    * Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians()));
+            } else {
+                *transform = Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians()))
+                    * Transform::from_translation(motor.position.into())
+                        .looking_to(motor.orientation.into(), (-motor.position).into())
+                        .with_scale(Vec3::splat(2.5));
+            }
+        }
 
-        // let transform = Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians()));
-        // gizmos.line(
-        //     transform * Vec3::from(motor.position),
-        //     transform * Vec3::from(motor.position + motor.orientation),
-        //     Color::GREEN,
-        // );
+        for (mesh, mesh_type) in mesh_query.iter() {
+            *meshes.get_mut(mesh).unwrap() = make_strength_mesh(&motor_conf.0, *mesh_type);
+        }
+
+        *highlight_query.single_mut() =
+            Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians()))
+                * Transform::from_translation(
+                    (motor_conf
+                        .0
+                        .motor(&X3dMotorId::FrontRightTop)
+                        .unwrap()
+                        .orientation
+                        * heuristic::score(&physics(&motor_conf.0), &score_settings.0)
+                        * 0.3)
+                        .into(),
+                );
     }
 
     gizmos.rect(
@@ -377,21 +553,50 @@ fn add_motor_conf(
 
     commands.spawn((
         PbrBundle {
-            mesh: meshes.add(make_strength_mesh(motor_conf, StrengthMeshType::Force)),
+            mesh: meshes.add(
+                shape::Icosphere {
+                    radius: 0.05,
+                    subdivisions: 20,
+                }
+                .try_into()
+                .unwrap(),
+            ),
+            material: materials_pbr.add(Color::GRAY.into()),
+            transform: Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians()))
+                * Transform::from_translation(
+                    (motor_conf
+                        .motor(&X3dMotorId::FrontRightTop)
+                        .unwrap()
+                        .orientation
+                        * heuristic::score(&physics(motor_conf), &Default::default())
+                        * 0.3)
+                        .into(),
+                ),
+            ..default()
+        },
+        CurrentConfig,
+        RenderLayers::layer(3),
+    ));
+
+    commands.spawn((
+        PbrBundle {
+            mesh: meshes.add(make_strength_mesh(motor_conf, StrengthMesh::Force)),
             material: materials_pbr.add(Color::rgb(0.8, 0.7, 0.6).into()),
             transform: Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians())),
             ..default()
         },
+        StrengthMesh::Force,
         RenderLayers::layer(1),
     ));
 
     commands.spawn((
         PbrBundle {
-            mesh: meshes.add(make_strength_mesh(motor_conf, StrengthMeshType::Torque)),
+            mesh: meshes.add(make_strength_mesh(motor_conf, StrengthMesh::Torque)),
             material: materials_pbr.add(Color::rgb(0.8, 0.7, 0.6).into()),
             transform: Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians())),
             ..default()
         },
+        StrengthMesh::Torque,
         RenderLayers::layer(2),
     ));
 
@@ -442,7 +647,7 @@ fn add_motor(
                 * Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians())),
             ..default()
         },
-        MotorMarker(motor_id),
+        MotorMarker(motor_id, true),
         RenderLayers::layer(0),
     ));
 
@@ -456,7 +661,7 @@ fn add_motor(
 
             ..default()
         },
-        MotorMarker(motor_id),
+        MotorMarker(motor_id, false),
         RenderLayers::layer(0),
     ));
 }
@@ -478,19 +683,14 @@ fn set_camera_viewports(
     }
 }
 
-enum StrengthMeshType {
-    Force,
-    Torque,
-}
-
-fn make_strength_mesh(motor_config: &MotorConfig<X3dMotorId>, mesh_type: StrengthMeshType) -> Mesh {
+fn make_strength_mesh(motor_config: &MotorConfig<X3dMotorId>, mesh_type: StrengthMesh) -> Mesh {
     let generated = IcoSphere::new(50, |point| {
         let movement = match mesh_type {
-            StrengthMeshType::Force => Movement {
+            StrengthMesh::Force => Movement {
                 force: point.normalize(),
                 torque: Vec3A::ZERO,
             },
-            StrengthMeshType::Torque => Movement {
+            StrengthMesh::Torque => Movement {
                 force: Vec3A::ZERO,
                 torque: point.normalize(),
             },
@@ -505,16 +705,16 @@ fn make_strength_mesh(motor_config: &MotorConfig<X3dMotorId>, mesh_type: Strengt
         let adjusted_movement = forward::forward_solve(motor_config, &forces);
 
         match mesh_type {
-            StrengthMeshType::Force => adjusted_movement.force.dot(movement.force).abs(),
-            StrengthMeshType::Torque => adjusted_movement.torque.dot(movement.torque).abs(),
+            StrengthMesh::Force => adjusted_movement.force.dot(movement.force).abs(),
+            StrengthMesh::Torque => adjusted_movement.torque.dot(movement.torque).abs(),
         }
     });
 
     iso_sphere_to_mesh(generated)
 }
 
-fn make_heuristic_meshes() -> (Mesh, Mesh) {
-    let positive = IcoSphere::new(60, |point| {
+fn make_heuristic_meshes(score_settings: &ScoreSettings) -> (Mesh, Mesh) {
+    let positive = IcoSphere::new(30, |point| {
         let motor_config = MotorConfig::<X3dMotorId>::new(Motor {
             position: vec3a(WIDTH, LENGTH, HEIGHT) / 2.0,
             orientation: point.normalize(),
@@ -522,12 +722,12 @@ fn make_heuristic_meshes() -> (Mesh, Mesh) {
         });
 
         let physics = physics(&motor_config);
-        let score = heuristic::score(&physics, &Default::default());
+        let score = heuristic::score(&physics, score_settings);
 
         score.clamp(0.0, 10.0) * 0.3
     });
 
-    let negative = IcoSphere::new(60, |point| {
+    let negative = IcoSphere::new(30, |point| {
         let motor_config = MotorConfig::<X3dMotorId>::new(Motor {
             position: vec3a(WIDTH, LENGTH, HEIGHT) / 2.0,
             orientation: -point.normalize(),
@@ -535,7 +735,7 @@ fn make_heuristic_meshes() -> (Mesh, Mesh) {
         });
 
         let physics = physics(&motor_config);
-        let score = heuristic::score(&physics, &Default::default());
+        let score = heuristic::score(&physics, score_settings);
 
         score.clamp(-10.0, 0.0).abs() * 0.3
     });
@@ -590,6 +790,104 @@ fn sync_cameras(
         for mut camera in cameras.iter_mut() {
             *camera.0 = trans;
             *camera.1 = cam;
+        }
+    }
+}
+
+fn handle_heuristic_change(
+    mut commands: Commands,
+    score_settings: Res<ScoreSettingsRes>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    query: Query<(&Handle<Mesh>, &HeuristicMesh)>,
+    mut materials_pbr: ResMut<Assets<StandardMaterial>>,
+    points: Query<Entity, With<AccentPoint>>,
+) {
+    if score_settings.is_changed() {
+        let (positive, negative) = make_heuristic_meshes(&score_settings.0);
+
+        for (mesh, mesh_type) in query.iter() {
+            match mesh_type {
+                HeuristicMesh::Positive => *meshes.get_mut(mesh).unwrap() = positive.clone(),
+                HeuristicMesh::Negative => *meshes.get_mut(mesh).unwrap() = negative.clone(),
+            }
+        }
+
+        for point in &points {
+            commands.entity(point).despawn();
+        }
+
+        let sphere_points = fibonacci_sphere(1000);
+        for point in sphere_points {
+            commands.spawn((
+                PbrBundle {
+                    mesh: meshes.add(
+                        shape::Icosphere {
+                            radius: 0.01,
+                            subdivisions: 1,
+                        }
+                        .try_into()
+                        .unwrap(),
+                    ),
+                    material: materials_pbr.add(Color::WHITE.into()),
+                    transform: Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians()))
+                        * Transform::from_translation(
+                            (point.normalize()
+                                * heuristic::score(
+                                    &physics(&MotorConfig::<X3dMotorId>::new(Motor {
+                                        position: vec3a(WIDTH, LENGTH, HEIGHT) / 2.0,
+                                        orientation: point.normalize(),
+                                        direction: Direction::Clockwise,
+                                    })),
+                                    &score_settings.0,
+                                )
+                                * 0.3)
+                                .into(),
+                        ),
+                    ..default()
+                },
+                AccentPoint(point, false),
+                RenderLayers::layer(3),
+            ));
+        }
+    }
+}
+
+fn step_accent_points(
+    mut motor_conf: ResMut<MotorConfigRes>,
+    mut points: Query<(&mut AccentPoint, &mut Transform)>,
+    score_settings: Res<ScoreSettingsRes>,
+) {
+    let mut best: Option<(MotorConfig<X3dMotorId>, f32)> = None;
+
+    for (mut point, mut transform) in points.iter_mut() {
+        if !point.1 {
+            let (next_point, done) = accent_sphere(0.005, point.0, &score_settings.0);
+
+            point.0 = next_point;
+            point.1 = done;
+
+            let config = MotorConfig::<X3dMotorId>::new(Motor {
+                position: vec3a(WIDTH, LENGTH, HEIGHT) / 2.0,
+                orientation: next_point.normalize(),
+                direction: Direction::Clockwise,
+            });
+
+            let score = heuristic::score(&physics(&config), &score_settings.0);
+
+            *transform = Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians()))
+                * Transform::from_translation((next_point.normalize() * score * 0.3).into());
+
+            if Some(score) > best.as_ref().map(|it| it.1) {
+                best = Some((config, score));
+            }
+        }
+    }
+
+    if let Some((best, best_score)) = best {
+        let current_score = heuristic::score(&physics(&motor_conf.0), &score_settings.0);
+
+        if (best_score - current_score).abs() > 0.001 {
+            *motor_conf = MotorConfigRes(best);
         }
     }
 }

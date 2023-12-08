@@ -9,9 +9,9 @@ use motor_math::{
     MotorConfig, Movement,
 };
 
-pub const WIDTH: f32 = 0.325;
-pub const LENGTH: f32 = 0.355;
-pub const HEIGHT: f32 = 0.241;
+pub const WIDTH: f32 = 0.325 * 2.0;
+pub const LENGTH: f32 = 0.355 * 2.0;
+pub const HEIGHT: f32 = 0.241 * 2.0;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum PhysicsAxis {

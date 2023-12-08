@@ -2,26 +2,27 @@ use ahash::HashMap;
 
 use crate::{PhysicsAxis, PhysicsResult};
 
+#[derive(Clone)]
 pub struct ScoreSettings {
-    mes_linear: f32,
-    mes_torque: f32,
-    avg_linear: f32,
-    avg_torque: f32,
-    min_linear: f32,
-    min_torque: f32,
-    x: f32,
-    y: f32,
-    z: f32,
-    x_rot: f32,
-    y_rot: f32,
-    z_rot: f32,
+    pub mes_linear: f32,
+    pub mes_torque: f32,
+    pub avg_linear: f32,
+    pub avg_torque: f32,
+    pub min_linear: f32,
+    pub min_torque: f32,
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+    pub x_rot: f32,
+    pub y_rot: f32,
+    pub z_rot: f32,
 }
 
 impl Default for ScoreSettings {
     fn default() -> Self {
         Self {
             mes_linear: -1.0,
-            mes_torque: -1.0,
+            mes_torque: 0.0,
             avg_linear: 0.0,
             avg_torque: 0.0,
             min_linear: 0.0,
@@ -29,9 +30,9 @@ impl Default for ScoreSettings {
             x: 1.0,
             y: 1.0,
             z: 1.0,
-            x_rot: 0.0,
-            y_rot: 0.0,
-            z_rot: 0.0,
+            x_rot: 1.0,
+            y_rot: 1.0,
+            z_rot: 1.0,
         }
     }
 }
