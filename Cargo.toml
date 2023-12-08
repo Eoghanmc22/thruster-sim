@@ -12,11 +12,10 @@ ahash = "0.8"
 serde = { version = "1", features = ["derive"] }
 itertools = "0.11"
 
-# bevy = { version = "0.11", default-features = false, features = ["animation", "bevy_asset", "bevy_gilrs", "bevy_scene", "bevy_winit", "bevy_core_pipeline", "bevy_pbr", "bevy_gltf", "bevy_render", "multi-threaded", "filesystem_watcher", "wayland", "webgl2", "tonemapping_luts", "ktx2", "zstd", "default_font", "dynamic_linking"] }
-bevy = { version = "0.11", default-features = false, features = ["animation", "bevy_asset", "bevy_gilrs", "bevy_scene", "bevy_winit", "bevy_core_pipeline", "bevy_pbr", "bevy_gltf", "bevy_render", "multi-threaded", "filesystem_watcher", "wayland", "webgl2", "tonemapping_luts", "ktx2", "zstd", "default_font"] }
-# bevy = { version = "0.11", features = ["wayland", "dynamic_linking"] }
-bevy_panorbit_camera = "0.7"
-bevy_egui = "0.21"
+# bevy = { version = "0.12", default-features = false, features = ["animation", "bevy_asset", "bevy_gilrs", "bevy_scene", "bevy_winit", "bevy_core_pipeline", "bevy_pbr", "bevy_gltf", "bevy_render", "multi-threaded", "filesystem_watcher", "wayland", "webgl2", "tonemapping_luts", "ktx2", "zstd", "default_font", "dynamic_linking"] }
+bevy = { version = "0.12", features = ["wayland", "dynamic_linking"] }
+bevy_panorbit_camera = "0.9"
+bevy_egui = "0.23"
 
 hexasphere = "9"
 
