@@ -32,6 +32,11 @@ jobs: # here we are specifing all of the jobs
         run: sudo apt-get update; sudo apt-get install --no-install-recommends libasound2-dev libudev-dev
       - name: Build
         run: cargo build --bin thruster-sim --target wasm32-unknown-unknown --profile web && wasm-bindgen --out-dir ./out/ --target web ./target/wasm32-unknown-unknown/web/thruster-sim.wasm
+      - name: Optimize
+        uses: NiklasEi/wasm-opt-action@v2
+        with:
+          file: ./out/thruster-sim_bg.wasm
+          options: "-O -ol 100 -s 100"
       - name: Copy
         # run: cp -R assets out/ && cp index.html out/index.html
         run: cp index.html out/index.html
