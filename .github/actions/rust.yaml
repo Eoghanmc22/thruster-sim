@@ -1,0 +1,43 @@
+name: build
+
+on:
+  push:
+    branches:
+      - 'main'
+      - 'master'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs: # here we are specifing all of the jobs
+  build: # name of the job
+    runs-on: ubuntu-latest # system, linux is the cheapest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ github.ref || github.run_id }}
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: Aandreba/setup-binaryen
+      - name: Install alsa and udev
+        run: sudo apt-get update; sudo apt-get install --no-install-recommends libasound2-dev libudev-dev
+      - name: Build
+        run: cargo build --bin thruster-sim --target wasm32-unknown-unknown --profile web && wasm-bindgen --out-dir ./out/ --target web ./target/wasm32-unknown-unknown/web/thruster-sim.wasm
+      - name: Copy
+        run: cp -R assets out/ && cp index.html out/index.html
+      - name: Push
+        uses: s0/git-publish-subdir-action@develop
+        env:
+          SQUASH_HISTORY: true
+          REPO: self
+          BRANCH: gh-pages # The branch name where you want to push the assets
+          FOLDER: out # The directory where your assets are generated
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # GitHub will automatically add this - you don't need to bother getting a token
+          MESSAGE: "Build: ({sha}) {msg}" # The commit message

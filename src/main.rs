@@ -24,7 +24,7 @@ use motor_math::{
     x3d::X3dMotorId,
     Direction, Motor, MotorConfig, Movement,
 };
-use random_math_test::{
+use thruster_sim::{
     heuristic::{self, ScoreSettings},
     optimize::{accent_sphere, fibonacci_sphere},
     physics, HEIGHT, LENGTH, WIDTH,

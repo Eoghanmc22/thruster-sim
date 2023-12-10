@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use bevy::math::{vec3a, Vec3A};
 use itertools::Itertools;
 use motor_math::{x3d::X3dMotorId, Direction, Motor, MotorConfig};
-use random_math_test::{
+use thruster_sim::{
     heuristic::score,
     optimize::{accent_sphere, fibonacci_sphere},
     physics, HEIGHT, LENGTH, WIDTH,
