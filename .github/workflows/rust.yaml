@@ -33,7 +33,8 @@ jobs: # here we are specifing all of the jobs
       - name: Build
         run: cargo build --bin thruster-sim --target wasm32-unknown-unknown --profile web && wasm-bindgen --out-dir ./out/ --target web ./target/wasm32-unknown-unknown/web/thruster-sim.wasm
       - name: Copy
-        run: cp -R assets out/ && cp index.html out/index.html
+        # run: cp -R assets out/ && cp index.html out/index.html
+        run: cp index.html out/index.html
       - name: Push
         uses: s0/git-publish-subdir-action@develop
         env:
