@@ -269,10 +269,8 @@ fn render_gui(
     let response = egui::Window::new("Motor Config").show(contexts.ctx_mut(), |ui| {
         ui.set_width(250.0);
 
-        ui.group(|ui| {
+        ui.collapsing("Optimization Goals", |ui| {
             let mut settings = solver.0.clone();
-
-            ui.heading("Optimization Goals");
 
             let mut updated = false;
 
@@ -387,9 +385,7 @@ fn render_gui(
             ui.allocate_space((ui.available_width(), 0.0).into());
         });
 
-        ui.group(|ui| {
-            ui.heading("Physics Result");
-
+        ui.collapsing("Physics Result", |ui| {
             let physics_result = physics(&motor_conf.0);
             let physics_result: BTreeMap<_, _> = physics_result.into_iter().collect();
             ui.label(format!("{physics_result:#.2?}"));
@@ -397,9 +393,7 @@ fn render_gui(
             ui.allocate_space((ui.available_width(), 0.0).into());
         });
 
-        ui.group(|ui| {
-            ui.heading("FRT Thruster Data");
-
+        ui.collapsing("FRT Thruster Data", |ui| {
             let frt = motor_conf.0.motor(&X3dMotorId::FrontRightTop).unwrap();
             ui.label(format!("{frt:#.3?}"));
 
