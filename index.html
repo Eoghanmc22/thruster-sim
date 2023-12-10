@@ -1,52 +1,17 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 
-<head>
-    <meta charset="UTF-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="icon" href="data:,">
-    <title>Thruster Sim</title>
+<body style="margin: 0px;">
+  <script type="module">
+    import init from './thruster-sim.js'
 
-    <style>
-        body,
-        html {
-            margin: 0;
-            padding: 0;
-            width: 100vw;
-            height: 100%;
-        }
-
-        canvas {
-            display: block;
-            touch-action: none;
-        }
-
-        canvas:focus {
-            outline: none;
-        }
-    </style>
-</head>
-
-<body>
-    <script type="module">
-        async function run() {
-            await wasm_bindgen("/api/wasm.wasm").catch(error => {
-                if (!error.message.startsWith("Using exceptions for control flow, don't mind me. This isn't actually an error!")) {
-                    throw error;
-                }
-            });
-        }
-
-        run();
-    </script>
-
-    <script>
-        document.body.addEventListener("contextmenu", (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-        });
-    </script>
+    init().catch((error) => {
+      if (!error.message.startsWith("Using exceptions for control flow, don't mind me. This isn't actually an error!")) {
+        throw error;
+      }
+    });
+  </script>
 </body>
 
 </html>
+
