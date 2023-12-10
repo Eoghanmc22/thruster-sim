@@ -260,6 +260,8 @@ fn render_gui(
     mut cameras: Query<&mut PanOrbitCamera>,
 ) {
     let response = egui::Window::new("Motor Config").show(contexts.ctx_mut(), |ui| {
+        ui.set_width(250.0);
+
         ui.group(|ui| {
             let mut settings = solver.0.clone();
 
@@ -267,79 +269,105 @@ fn render_gui(
 
             let mut updated = false;
 
+            let text_width = 70.0;
+
             ui.horizontal(|ui| {
-                ui.label("MES Linear");
+                let width = ui.label("MES Linear").rect.width();
+                ui.allocate_space((text_width - width, 0.0).into());
+
                 updated |= ui
                     .add(Slider::new(&mut settings.mes_linear, -1.0..=1.0))
                     .changed();
             });
 
             ui.horizontal(|ui| {
-                ui.label("MES Torque");
+                let width = ui.label("MES Torque").rect.width();
+                ui.allocate_space((text_width - width, 0.0).into());
+
                 updated |= ui
                     .add(Slider::new(&mut settings.mes_torque, -1.0..=1.0))
                     .changed();
             });
 
             ui.horizontal(|ui| {
-                ui.label("Min Linear");
+                let width = ui.label("Min Linear").rect.width();
+                ui.allocate_space((text_width - width, 0.0).into());
+
                 updated |= ui
                     .add(Slider::new(&mut settings.min_linear, -1.0..=1.0))
                     .changed();
             });
 
             ui.horizontal(|ui| {
-                ui.label("Min Torque");
+                let width = ui.label("Min Torque").rect.width();
+                ui.allocate_space((text_width - width, 0.0).into());
+
                 updated |= ui
                     .add(Slider::new(&mut settings.min_torque, -1.0..=1.0))
                     .changed();
             });
 
             ui.horizontal(|ui| {
-                ui.label("Avg Linear");
+                let width = ui.label("Avg Linear").rect.width();
+                ui.allocate_space((text_width - width, 0.0).into());
+
                 updated |= ui
                     .add(Slider::new(&mut settings.avg_linear, -1.0..=1.0))
                     .changed();
             });
 
             ui.horizontal(|ui| {
-                ui.label("Avg Torque");
+                let width = ui.label("Avg Torque").rect.width();
+                ui.allocate_space((text_width - width, 0.0).into());
+
                 updated |= ui
                     .add(Slider::new(&mut settings.avg_torque, -1.0..=1.0))
                     .changed();
             });
 
             ui.horizontal(|ui| {
-                ui.label("X");
+                let width = ui.label("X").rect.width();
+                ui.allocate_space((text_width - width, 0.0).into());
+
                 updated |= ui.add(Slider::new(&mut settings.x, -1.0..=1.0)).changed();
             });
 
             ui.horizontal(|ui| {
-                ui.label("Y");
+                let width = ui.label("Y").rect.width();
+                ui.allocate_space((text_width - width, 0.0).into());
+
                 updated |= ui.add(Slider::new(&mut settings.y, -1.0..=1.0)).changed();
             });
 
             ui.horizontal(|ui| {
-                ui.label("Z");
+                let width = ui.label("Z").rect.width();
+                ui.allocate_space((text_width - width, 0.0).into());
+
                 updated |= ui.add(Slider::new(&mut settings.z, -1.0..=1.0)).changed();
             });
 
             ui.horizontal(|ui| {
-                ui.label("X ROT");
+                let width = ui.label("X ROT").rect.width();
+                ui.allocate_space((text_width - width, 0.0).into());
+
                 updated |= ui
                     .add(Slider::new(&mut settings.x_rot, -1.0..=1.0))
                     .changed();
             });
 
             ui.horizontal(|ui| {
-                ui.label("Y ROT");
+                let width = ui.label("Y ROT").rect.width();
+                ui.allocate_space((text_width - width, 0.0).into());
+
                 updated |= ui
                     .add(Slider::new(&mut settings.y_rot, -1.0..=1.0))
                     .changed();
             });
 
             ui.horizontal(|ui| {
-                ui.label("Z ROT");
+                let width = ui.label("Z ROT").rect.width();
+                ui.allocate_space((text_width - width, 0.0).into());
+
                 updated |= ui
                     .add(Slider::new(&mut settings.z_rot, -1.0..=1.0))
                     .changed();
@@ -348,6 +376,8 @@ fn render_gui(
             if updated {
                 commands.insert_resource(ScoreSettingsRes(settings));
             }
+
+            ui.allocate_space((ui.available_width(), 0.0).into());
         });
 
         ui.group(|ui| {
@@ -356,6 +386,17 @@ fn render_gui(
             let physics_result = physics(&motor_conf.0);
             let physics_result: BTreeMap<_, _> = physics_result.into_iter().collect();
             ui.label(format!("{physics_result:#.2?}"));
+
+            ui.allocate_space((ui.available_width(), 0.0).into());
+        });
+
+        ui.group(|ui| {
+            ui.heading("FRT Thruster Data");
+
+            let frt = motor_conf.0.motor(&X3dMotorId::FrontRightTop).unwrap();
+            ui.label(format!("{frt:#.3?}"));
+
+            ui.allocate_space((ui.available_width(), 0.0).into());
         });
 
         ui.interact(
