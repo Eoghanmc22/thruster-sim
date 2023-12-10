@@ -15,7 +15,7 @@ itertools = "0.11"
 # bevy = { version = "0.12", default-features = false, features = ["animation", "bevy_asset", "bevy_gilrs", "bevy_scene", "bevy_winit", "bevy_core_pipeline", "bevy_pbr", "bevy_gltf", "bevy_render", "multi-threaded", "filesystem_watcher", "wayland", "webgl2", "tonemapping_luts", "ktx2", "zstd", "default_font", "dynamic_linking"] }
 bevy = { version = "0.12", default-features = false, features = [
   "wayland",
-  "dynamic_linking",
+  # "dynamic_linking",
   "animation",
   "bevy_asset",
   "bevy_gilrs",
@@ -49,3 +49,16 @@ motor_math = { path = "../mate-rov-2024/motor_math/" }
 
 [profile.release]
 debug = true
+
+[profile.release-lto]
+inherits = "release"
+lto = true
+codegen-units = 1
+debug = false
+
+[profile.web]
+inherits = "release"
+lto = true
+codegen-units = 1
+opt-level = 's'
+debug = false

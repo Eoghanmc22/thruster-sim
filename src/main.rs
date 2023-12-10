@@ -11,7 +11,7 @@ use bevy::{
         render_resource::PrimitiveTopology,
         view::RenderLayers,
     },
-    window::{PrimaryWindow, WindowResized, WindowResolution},
+    window::{PresentMode, PrimaryWindow, Window, WindowResized, WindowResolution},
 };
 use bevy_egui::{
     egui::{self, Sense, Slider},
@@ -33,7 +33,14 @@ use random_math_test::{
 fn main() {
     App::new()
         .add_plugins((
-            DefaultPlugins,
+            DefaultPlugins.set(WindowPlugin {
+                primary_window: Some(Window {
+                    present_mode: PresentMode::AutoNoVsync, // Reduces input lag.
+                    fit_canvas_to_parent: true,
+                    ..default()
+                }),
+                ..default()
+            }),
             PanOrbitCameraPlugin,
             EguiPlugin,
             LogDiagnosticsPlugin::default(),
