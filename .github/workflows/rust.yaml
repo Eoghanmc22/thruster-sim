@@ -27,6 +27,7 @@ jobs: # here we are specifing all of the jobs
       - uses: dtolnay/rust-toolchain@nightly
         with:
           targets: "wasm32-unknown-unknown"
+      - uses: jetli/wasm-bindgen-action@v0.2.0
       - name: Install alsa and udev
         run: sudo apt-get update; sudo apt-get install --no-install-recommends libasound2-dev libudev-dev
       - name: Build
