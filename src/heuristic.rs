@@ -100,11 +100,11 @@ pub fn score(result: &HashMap<PhysicsAxis, PhysicsResult>, settings: &ScoreSetti
         + avg_linear * settings.avg_linear
         + avg_torque * settings.avg_torque
         + results[&PhysicsAxis::X] * settings.x
-        + results[&PhysicsAxis::Z] * settings.y
-        + results[&PhysicsAxis::Y] * settings.z
+        + results[&PhysicsAxis::Y] * settings.y
+        + results[&PhysicsAxis::Z] * settings.z
         + results[&PhysicsAxis::XRot] * settings.x_rot
-        + results[&PhysicsAxis::ZRot] * settings.y_rot
-        + results[&PhysicsAxis::YRot] * settings.z_rot
+        + results[&PhysicsAxis::YRot] * settings.y_rot
+        + results[&PhysicsAxis::ZRot] * settings.z_rot
     // - 30.0 * (results[&PhysicsAxis::X] - results[&PhysicsAxis::Y]).max(0.0)
     // - 30.0 * (results[&PhysicsAxis::Y] - results[&PhysicsAxis::Z]).max(0.0)
     // + 30.0 * (results[&PhysicsAxis::Y] - 4.5)

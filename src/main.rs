@@ -77,7 +77,7 @@ enum StrengthMesh {
 }
 
 #[derive(Component)]
-struct AccentPoint(Vec3A, bool);
+struct AccentPoint(Vec3A, bool, f32);
 
 #[derive(Component)]
 struct CurrentConfig;
@@ -125,23 +125,14 @@ fn setup(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials_pbr: ResMut<Assets<StandardMaterial>>,
     score_settings: Res<ScoreSettingsRes>,
-    asset_server: Res<AssetServer>,
 ) {
-    let motor_handle = asset_server.load("t200.gltf#Scene0");
-
     let motor_conf = MotorConfig::<X3dMotorId>::new(Motor {
         position: vec3a(WIDTH, LENGTH, HEIGHT) / 2.0,
         orientation: vec3a(0.254, -0.571, 0.781).normalize(),
         direction: Direction::Clockwise,
     });
 
-    add_motor_conf(
-        &motor_conf,
-        &mut commands,
-        &mut meshes,
-        &mut materials_pbr,
-        &motor_handle,
-    );
+    add_motor_conf(&motor_conf, &mut commands, &mut meshes, &mut materials_pbr);
     commands.insert_resource(MotorConfigRes(motor_conf.clone()));
 
     // light
@@ -259,75 +250,16 @@ fn setup(
         HeuristicMesh::Negative,
         RenderLayers::layer(3),
     ));
-
-    let result = physics(&motor_conf);
-    let result: BTreeMap<_, _> = result.into_iter().collect();
-
-    println!(
-        "{:+.3?}, {result:+.3?}",
-        motor_conf.motor(&X3dMotorId::FrontRightTop)
-    );
-
-    let sphere_points = fibonacci_sphere(1000);
-    for point in sphere_points {
-        commands.spawn((
-            PbrBundle {
-                mesh: meshes.add(
-                    shape::Icosphere {
-                        radius: 0.01,
-                        subdivisions: 1,
-                    }
-                    .try_into()
-                    .unwrap(),
-                ),
-                material: materials_pbr.add(Color::WHITE.into()),
-                transform: Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians()))
-                    * Transform::from_translation(
-                        (point.normalize()
-                            * heuristic::score(
-                                &physics(&MotorConfig::<X3dMotorId>::new(Motor {
-                                    position: vec3a(WIDTH, LENGTH, HEIGHT) / 2.0,
-                                    orientation: point.normalize(),
-                                    direction: Direction::Clockwise,
-                                })),
-                                &Default::default(),
-                            )
-                            * 0.3)
-                            .into(),
-                    ),
-                ..default()
-            },
-            AccentPoint(point, false),
-            RenderLayers::layer(3),
-        ));
-    }
 }
 
 fn render_gui(
+    mut commands: Commands,
     mut contexts: EguiContexts,
-    mut motor_conf: ResMut<MotorConfigRes>,
-    mut solver: ResMut<ScoreSettingsRes>,
+    motor_conf: Res<MotorConfigRes>,
+    solver: Res<ScoreSettingsRes>,
     mut cameras: Query<&mut PanOrbitCamera>,
 ) {
     let response = egui::Window::new("Motor Config").show(contexts.ctx_mut(), |ui| {
-        // if let SeedAngle::VecByTwoAngles { angle_xy, angle_yz } = &mut motor_conf.0.seed {
-        //     ui.horizontal(|ui| {
-        //         let mut angle = angle_xy.to_degrees();
-        //
-        //         ui.label("angle_xy");
-        //         if ui.add(Slider::new(&mut angle, 0.0..=360.0)).changed() {
-        //             *angle_xy = angle.to_radians();
-        //         }
-        //     });
-        //     ui.horizontal(|ui| {
-        //         let mut angle = angle_yz.to_degrees();
-        //
-        //         ui.label("angle_yz");
-        //         if ui.add(Slider::new(&mut angle, 0.0..=360.0)).changed() {
-        //             *angle_yz = angle.to_radians();
-        //         }
-        //     });
-        // }
         ui.group(|ui| {
             let mut settings = solver.0.clone();
 
@@ -414,7 +346,7 @@ fn render_gui(
             });
 
             if updated {
-                solver.0 = settings;
+                commands.insert_resource(ScoreSettingsRes(settings));
             }
         });
 
@@ -449,30 +381,35 @@ fn render_gui(
 }
 
 fn update_motor_conf(
-    motor_conf: ResMut<MotorConfigRes>,
+    mut commands: Commands,
+    motor_conf: Res<MotorConfigRes>,
     score_settings: Res<ScoreSettingsRes>,
-    mut motors_query: Query<(&MotorMarker, &mut Transform)>,
+    motors_query: Query<(Entity, &MotorMarker)>,
     mut meshes: ResMut<Assets<Mesh>>,
     mesh_query: Query<(&Handle<Mesh>, &StrengthMesh)>,
-    mut highlight_query: Query<&mut Transform, (With<CurrentConfig>, Without<MotorMarker>)>,
+    highlight_query: Query<Entity, With<CurrentConfig>>,
     mut gizmos: Gizmos,
 ) {
     if motor_conf.is_changed() {
-        for (motor_id, mut transform) in motors_query.iter_mut() {
+        for (entity, motor_id) in motors_query.iter() {
             let motor = motor_conf.0.motor(&motor_id.0).unwrap();
 
             if motor_id.1 {
-                *transform = Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians()))
+                let transform = Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians()))
                     * Transform::from_translation(
                         (motor.position + motor.orientation / 2.0).into(),
                     )
                     .looking_to(motor.orientation.into(), (-motor.position).into())
                     * Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians()));
+
+                commands.entity(entity).insert(transform);
             } else {
-                *transform = Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians()))
-                    * Transform::from_translation(motor.position.into())
+                let transform = Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians()))
+                    * Transform::from_translation((motor.position).into())
                         .looking_to(motor.orientation.into(), (-motor.position).into())
-                        .with_scale(Vec3::splat(2.5));
+                    * Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians()));
+
+                commands.entity(entity).insert(transform);
             }
         }
 
@@ -480,18 +417,18 @@ fn update_motor_conf(
             *meshes.get_mut(mesh).unwrap() = make_strength_mesh(&motor_conf.0, *mesh_type);
         }
 
-        *highlight_query.single_mut() =
-            Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians()))
-                * Transform::from_translation(
-                    (motor_conf
-                        .0
-                        .motor(&X3dMotorId::FrontRightTop)
-                        .unwrap()
-                        .orientation
-                        * heuristic::score(&physics(&motor_conf.0), &score_settings.0)
-                        * 0.3)
-                        .into(),
-                );
+        let transform = Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians()))
+            * Transform::from_translation(
+                (motor_conf
+                    .0
+                    .motor(&X3dMotorId::FrontRightTop)
+                    .unwrap()
+                    .orientation
+                    * heuristic::score(&physics(&motor_conf.0), &score_settings.0)
+                    * 0.3)
+                    .into(),
+            );
+        commands.entity(highlight_query.single()).insert(transform);
     }
 
     gizmos.rect(
@@ -538,8 +475,6 @@ fn add_motor_conf(
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
     materials_pbr: &mut ResMut<Assets<StandardMaterial>>,
-
-    motor_handle: &Handle<Scene>,
 ) {
     commands.spawn((
         PbrBundle {
@@ -562,16 +497,6 @@ fn add_motor_conf(
                 .unwrap(),
             ),
             material: materials_pbr.add(Color::GRAY.into()),
-            transform: Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians()))
-                * Transform::from_translation(
-                    (motor_conf
-                        .motor(&X3dMotorId::FrontRightTop)
-                        .unwrap()
-                        .orientation
-                        * heuristic::score(&physics(motor_conf), &Default::default())
-                        * 0.3)
-                        .into(),
-                ),
             ..default()
         },
         CurrentConfig,
@@ -600,27 +525,17 @@ fn add_motor_conf(
         RenderLayers::layer(2),
     ));
 
-    for (motor_id, motor) in motor_conf.motors() {
-        add_motor(
-            *motor_id,
-            *motor,
-            commands,
-            meshes,
-            materials_pbr,
-            motor_handle,
-        );
+    for (motor_id, _) in motor_conf.motors() {
+        add_motor(*motor_id, commands, meshes, materials_pbr);
     }
 }
 
 fn add_motor(
     motor_id: X3dMotorId,
-    motor: Motor,
 
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
     materials_pbr: &mut ResMut<Assets<StandardMaterial>>,
-
-    motor_handle: &Handle<Scene>,
 ) {
     commands.spawn((
         PbrBundle {
@@ -633,18 +548,6 @@ fn add_motor(
                 .into(),
             ),
             material: materials_pbr.add(Color::GREEN.into()),
-            // transform: Transform::from_rotation(
-            //     Quat::from_rotation_x(90f32.to_radians())
-            //         * Quat::from_rotation_arc(Vec3::X, motor.orientation.into()),
-            // )
-            // .with_translation(
-            //     Quat::from_rotation_x(90f32.to_radians())
-            //         * Vec3::from(motor.position + motor.orientation / 2.0),
-            // ),
-            transform: Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians()))
-                * Transform::from_translation((motor.position + motor.orientation / 2.0).into())
-                    .looking_to(motor.orientation.into(), (-motor.position).into())
-                * Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians())),
             ..default()
         },
         MotorMarker(motor_id, true),
@@ -652,13 +555,16 @@ fn add_motor(
     ));
 
     commands.spawn((
-        SceneBundle {
-            scene: motor_handle.clone(),
-            transform: Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians()))
-                * Transform::from_translation(motor.position.into())
-                    .looking_to(motor.orientation.into(), (-motor.position).into())
-                    .with_scale(Vec3::splat(2.5)),
-
+        PbrBundle {
+            mesh: meshes.add(
+                Cylinder {
+                    radius: 0.1,
+                    height: 0.1,
+                    ..default()
+                }
+                .into(),
+            ),
+            material: materials_pbr.add(Color::DARK_GRAY.into()),
             ..default()
         },
         MotorMarker(motor_id, false),
@@ -684,7 +590,7 @@ fn set_camera_viewports(
 }
 
 fn make_strength_mesh(motor_config: &MotorConfig<X3dMotorId>, mesh_type: StrengthMesh) -> Mesh {
-    let generated = IcoSphere::new(50, |point| {
+    let generated = IcoSphere::new(20, |point| {
         let movement = match mesh_type {
             StrengthMesh::Force => Movement {
                 force: point.normalize(),
@@ -714,7 +620,7 @@ fn make_strength_mesh(motor_config: &MotorConfig<X3dMotorId>, mesh_type: Strengt
 }
 
 fn make_heuristic_meshes(score_settings: &ScoreSettings) -> (Mesh, Mesh) {
-    let positive = IcoSphere::new(30, |point| {
+    let positive = IcoSphere::new(20, |point| {
         let motor_config = MotorConfig::<X3dMotorId>::new(Motor {
             position: vec3a(WIDTH, LENGTH, HEIGHT) / 2.0,
             orientation: point.normalize(),
@@ -727,7 +633,7 @@ fn make_heuristic_meshes(score_settings: &ScoreSettings) -> (Mesh, Mesh) {
         score.clamp(0.0, 10.0) * 0.3
     });
 
-    let negative = IcoSphere::new(30, |point| {
+    let negative = IcoSphere::new(20, |point| {
         let motor_config = MotorConfig::<X3dMotorId>::new(Motor {
             position: vec3a(WIDTH, LENGTH, HEIGHT) / 2.0,
             orientation: -point.normalize(),
@@ -770,7 +676,7 @@ fn iso_sphere_to_mesh(obj: IcoSphere<f32>) -> Mesh {
 }
 
 fn sync_cameras(
-    mut cameras: Query<(&mut Transform, &mut PanOrbitCamera, &Camera), With<Camera3d>>,
+    mut cameras: Query<(&mut Transform, &mut PanOrbitCamera, &Camera)>,
     windows: Query<&Window, With<PrimaryWindow>>,
 ) {
     let mut update = None;
@@ -816,7 +722,7 @@ fn handle_heuristic_change(
             commands.entity(point).despawn();
         }
 
-        let sphere_points = fibonacci_sphere(1000);
+        let sphere_points = fibonacci_sphere(100);
         for point in sphere_points {
             commands.spawn((
                 PbrBundle {
@@ -829,23 +735,9 @@ fn handle_heuristic_change(
                         .unwrap(),
                     ),
                     material: materials_pbr.add(Color::WHITE.into()),
-                    transform: Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians()))
-                        * Transform::from_translation(
-                            (point.normalize()
-                                * heuristic::score(
-                                    &physics(&MotorConfig::<X3dMotorId>::new(Motor {
-                                        position: vec3a(WIDTH, LENGTH, HEIGHT) / 2.0,
-                                        orientation: point.normalize(),
-                                        direction: Direction::Clockwise,
-                                    })),
-                                    &score_settings.0,
-                                )
-                                * 0.3)
-                                .into(),
-                        ),
                     ..default()
                 },
-                AccentPoint(point, false),
+                AccentPoint(point, false, 0.0),
                 RenderLayers::layer(3),
             ));
         }
@@ -853,33 +745,47 @@ fn handle_heuristic_change(
 }
 
 fn step_accent_points(
-    mut motor_conf: ResMut<MotorConfigRes>,
-    mut points: Query<(&mut AccentPoint, &mut Transform)>,
+    mut commands: Commands,
+    motor_conf: Res<MotorConfigRes>,
+    mut points: Query<(Entity, &mut AccentPoint)>,
     score_settings: Res<ScoreSettingsRes>,
 ) {
-    let mut best: Option<(MotorConfig<X3dMotorId>, f32)> = None;
-
-    for (mut point, mut transform) in points.iter_mut() {
+    points.par_iter_mut().for_each(|(_, mut point)| {
         if !point.1 {
             let (next_point, done) = accent_sphere(0.005, point.0, &score_settings.0);
 
-            point.0 = next_point;
-            point.1 = done;
-
             let config = MotorConfig::<X3dMotorId>::new(Motor {
                 position: vec3a(WIDTH, LENGTH, HEIGHT) / 2.0,
-                orientation: next_point.normalize(),
+                orientation: point.0.normalize(),
                 direction: Direction::Clockwise,
             });
 
             let score = heuristic::score(&physics(&config), &score_settings.0);
 
-            *transform = Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians()))
-                * Transform::from_translation((next_point.normalize() * score * 0.3).into());
+            point.0 = next_point;
+            point.1 = done;
+            point.2 = score
+        }
+    });
 
-            if Some(score) > best.as_ref().map(|it| it.1) {
-                best = Some((config, score));
-            }
+    let mut best: Option<(MotorConfig<X3dMotorId>, f32)> = None;
+
+    for (entity, point) in points.iter() {
+        if !point.1 {
+            let transform = Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians()))
+                * Transform::from_translation((point.0.normalize() * point.2 * 0.3).into());
+
+            commands.entity(entity).try_insert(transform);
+        }
+
+        if Some(point.2) > best.as_ref().map(|it| it.1) {
+            let config = MotorConfig::<X3dMotorId>::new(Motor {
+                position: vec3a(WIDTH, LENGTH, HEIGHT) / 2.0,
+                orientation: point.0.normalize(),
+                direction: Direction::Clockwise,
+            });
+
+            best = Some((config, point.2));
         }
     }
 
@@ -887,7 +793,7 @@ fn step_accent_points(
         let current_score = heuristic::score(&physics(&motor_conf.0), &score_settings.0);
 
         if (best_score - current_score).abs() > 0.001 {
-            *motor_conf = MotorConfigRes(best);
+            commands.insert_resource(MotorConfigRes(best));
         }
     }
 }

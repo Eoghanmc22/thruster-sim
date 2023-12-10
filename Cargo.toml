@@ -36,7 +36,7 @@ bevy = { version = "0.12", default-features = false, features = [
   "android_shared_stdcxx",
   "tonemapping_luts",
   "default_font",
-  "webgl2"
+  "webgl2",
 ] }
 bevy_panorbit_camera = "0.9"
 bevy_egui = "0.23"
