@@ -1,8 +1,35 @@
 <!doctype html>
 <html lang="en">
 
-<body style="margin: 0px;">
-  <script type="module">
+  <head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="data:,">
+    <title>Thruster Sim</title>
+
+    <style>
+    body,
+    html {
+      margin: 0;
+      padding: 0;
+      width: 100vw;
+      height: 100%;
+    }
+
+    canvas {
+      display: block;
+      touch-action: none;
+    }
+
+    canvas:focus {
+      outline: none;
+    }
+    </style>
+  </head>
+
+  <body style="margin: 0px;">
+    <script type="module">
     import init from './thruster-sim.js'
 
     init().catch((error) => {
@@ -10,8 +37,8 @@
         throw error;
       }
     });
-  </script>
-</body>
+    </script>
+  </body>
 
 </html>
 
