@@ -50,7 +50,7 @@ fn main() {
             render_layers: RenderLayers::all(),
             ..default()
         })
-        .insert_resource(ScoreSettingsRes(ScoreSettings::default()))
+        .insert_resource(ScoreSettingsRes(ToggleableScoreSettings::default()))
         .add_systems(Startup, setup)
         .add_systems(
             Update,
@@ -69,7 +69,7 @@ fn main() {
 #[derive(Resource)]
 struct MotorConfigRes(MotorConfig<X3dMotorId>);
 #[derive(Resource)]
-struct ScoreSettingsRes(ScoreSettings);
+struct ScoreSettingsRes(ToggleableScoreSettings);
 #[derive(Component)]
 struct MotorMarker(X3dMotorId, bool);
 #[derive(Component)]
@@ -234,7 +234,7 @@ fn setup(
         CameraPos::LeftBottom,
     ));
 
-    let (positive, negative) = make_heuristic_meshes(&score_settings.0);
+    let (positive, negative) = make_heuristic_meshes(&score_settings.0.flatten());
 
     commands.spawn((
         PbrBundle {
@@ -274,107 +274,164 @@ fn render_gui(
 
             let mut updated = false;
 
-            let text_width = 70.0;
+            let text_width = 100.0;
 
             ui.horizontal(|ui| {
-                let width = ui.label("MES Linear").rect.width();
+                let check = ui.checkbox(&mut settings.mes_linear.0, "MES Linear");
+                let width = check.rect.width();
                 ui.allocate_space((text_width - width, 0.0).into());
 
+                updated |= check.changed();
                 updated |= ui
-                    .add(Slider::new(&mut settings.mes_linear, -1.0..=1.0))
+                    .add_enabled(
+                        settings.mes_linear.0,
+                        Slider::new(&mut settings.mes_linear.1, -1.0..=1.0),
+                    )
                     .changed();
             });
 
             ui.horizontal(|ui| {
-                let width = ui.label("MES Torque").rect.width();
+                let check = ui.checkbox(&mut settings.mes_torque.0, "MES Torque");
+                let width = check.rect.width();
                 ui.allocate_space((text_width - width, 0.0).into());
 
+                updated |= check.changed();
                 updated |= ui
-                    .add(Slider::new(&mut settings.mes_torque, -1.0..=1.0))
+                    .add_enabled(
+                        settings.mes_torque.0,
+                        Slider::new(&mut settings.mes_torque.1, -1.0..=1.0),
+                    )
                     .changed();
             });
 
             ui.horizontal(|ui| {
-                let width = ui.label("Min Linear").rect.width();
+                let check = ui.checkbox(&mut settings.min_linear.0, "Min Linear");
+                let width = check.rect.width();
                 ui.allocate_space((text_width - width, 0.0).into());
 
+                updated |= check.changed();
                 updated |= ui
-                    .add(Slider::new(&mut settings.min_linear, -1.0..=1.0))
+                    .add_enabled(
+                        settings.min_linear.0,
+                        Slider::new(&mut settings.min_linear.1, -1.0..=1.0),
+                    )
                     .changed();
             });
 
             ui.horizontal(|ui| {
-                let width = ui.label("Min Torque").rect.width();
+                let check = ui.checkbox(&mut settings.min_torque.0, "Min Torque");
+                let width = check.rect.width();
                 ui.allocate_space((text_width - width, 0.0).into());
 
+                updated |= check.changed();
                 updated |= ui
-                    .add(Slider::new(&mut settings.min_torque, -1.0..=1.0))
+                    .add_enabled(
+                        settings.min_torque.0,
+                        Slider::new(&mut settings.min_torque.1, -1.0..=1.0),
+                    )
                     .changed();
             });
 
             ui.horizontal(|ui| {
-                let width = ui.label("Avg Linear").rect.width();
+                let check = ui.checkbox(&mut settings.avg_linear.0, "Avg Linear");
+                let width = check.rect.width();
                 ui.allocate_space((text_width - width, 0.0).into());
 
+                updated |= check.changed();
                 updated |= ui
-                    .add(Slider::new(&mut settings.avg_linear, -1.0..=1.0))
+                    .add_enabled(
+                        settings.avg_linear.0,
+                        Slider::new(&mut settings.avg_linear.1, -1.0..=1.0),
+                    )
                     .changed();
             });
 
             ui.horizontal(|ui| {
-                let width = ui.label("Avg Torque").rect.width();
+                let check = ui.checkbox(&mut settings.avg_torque.0, "Avg Torque");
+                let width = check.rect.width();
                 ui.allocate_space((text_width - width, 0.0).into());
 
+                updated |= check.changed();
                 updated |= ui
-                    .add(Slider::new(&mut settings.avg_torque, -1.0..=1.0))
+                    .add_enabled(
+                        settings.avg_torque.0,
+                        Slider::new(&mut settings.avg_torque.1, -1.0..=1.0),
+                    )
                     .changed();
             });
 
             ui.horizontal(|ui| {
-                let width = ui.label("X").rect.width();
+                let check = ui.checkbox(&mut settings.x.0, "X");
+                let width = check.rect.width();
                 ui.allocate_space((text_width - width, 0.0).into());
 
-                updated |= ui.add(Slider::new(&mut settings.x, -1.0..=1.0)).changed();
-            });
-
-            ui.horizontal(|ui| {
-                let width = ui.label("Y").rect.width();
-                ui.allocate_space((text_width - width, 0.0).into());
-
-                updated |= ui.add(Slider::new(&mut settings.y, -1.0..=1.0)).changed();
-            });
-
-            ui.horizontal(|ui| {
-                let width = ui.label("Z").rect.width();
-                ui.allocate_space((text_width - width, 0.0).into());
-
-                updated |= ui.add(Slider::new(&mut settings.z, -1.0..=1.0)).changed();
-            });
-
-            ui.horizontal(|ui| {
-                let width = ui.label("X ROT").rect.width();
-                ui.allocate_space((text_width - width, 0.0).into());
-
+                updated |= check.changed();
                 updated |= ui
-                    .add(Slider::new(&mut settings.x_rot, -1.0..=1.0))
+                    .add_enabled(settings.x.0, Slider::new(&mut settings.x.1, -1.0..=1.0))
                     .changed();
             });
 
             ui.horizontal(|ui| {
-                let width = ui.label("Y ROT").rect.width();
+                let check = ui.checkbox(&mut settings.y.0, "Y");
+                let width = check.rect.width();
                 ui.allocate_space((text_width - width, 0.0).into());
 
+                updated |= check.changed();
                 updated |= ui
-                    .add(Slider::new(&mut settings.y_rot, -1.0..=1.0))
+                    .add_enabled(settings.y.0, Slider::new(&mut settings.y.1, -1.0..=1.0))
                     .changed();
             });
 
             ui.horizontal(|ui| {
-                let width = ui.label("Z ROT").rect.width();
+                let check = ui.checkbox(&mut settings.z.0, "Z");
+                let width = check.rect.width();
                 ui.allocate_space((text_width - width, 0.0).into());
 
+                updated |= check.changed();
                 updated |= ui
-                    .add(Slider::new(&mut settings.z_rot, -1.0..=1.0))
+                    .add_enabled(settings.z.0, Slider::new(&mut settings.z.1, -1.0..=1.0))
+                    .changed();
+            });
+
+            ui.horizontal(|ui| {
+                let check = ui.checkbox(&mut settings.x_rot.0, "X ROT");
+                let width = check.rect.width();
+                ui.allocate_space((text_width - width, 0.0).into());
+
+                updated |= check.changed();
+                updated |= ui
+                    .add_enabled(
+                        settings.x_rot.0,
+                        Slider::new(&mut settings.x_rot.1, -1.0..=1.0),
+                    )
+                    .changed();
+            });
+
+            ui.horizontal(|ui| {
+                let check = ui.checkbox(&mut settings.y_rot.0, "Y ROT");
+                let width = check.rect.width();
+                ui.allocate_space((text_width - width, 0.0).into());
+
+                updated |= check.changed();
+                updated |= ui
+                    .add_enabled(
+                        settings.y_rot.0,
+                        Slider::new(&mut settings.y_rot.1, -1.0..=1.0),
+                    )
+                    .changed();
+            });
+
+            ui.horizontal(|ui| {
+                let check = ui.checkbox(&mut settings.z_rot.0, "Z ROT");
+                let width = check.rect.width();
+                ui.allocate_space((text_width - width, 0.0).into());
+
+                updated |= check.changed();
+                updated |= ui
+                    .add_enabled(
+                        settings.z_rot.0,
+                        Slider::new(&mut settings.z_rot.1, -1.0..=1.0),
+                    )
                     .changed();
             });
 
@@ -466,7 +523,7 @@ fn update_motor_conf(
                     .motor(&X3dMotorId::FrontRightTop)
                     .unwrap()
                     .orientation
-                    * heuristic::score(&physics(&motor_conf.0), &score_settings.0)
+                    * heuristic::score(&physics(&motor_conf.0), &score_settings.0.flatten())
                     * 0.3)
                     .into(),
             );
@@ -751,7 +808,7 @@ fn handle_heuristic_change(
     points: Query<Entity, With<AccentPoint>>,
 ) {
     if score_settings.is_changed() {
-        let (positive, negative) = make_heuristic_meshes(&score_settings.0);
+        let (positive, negative) = make_heuristic_meshes(&score_settings.0.flatten());
 
         for (mesh, mesh_type) in query.iter() {
             match mesh_type {
@@ -794,7 +851,7 @@ fn step_accent_points(
 ) {
     points.par_iter_mut().for_each(|(_, mut point)| {
         if !point.1 {
-            let (next_point, done) = accent_sphere(0.005, point.0, &score_settings.0);
+            let (next_point, done) = accent_sphere(0.005, point.0, &score_settings.0.flatten());
 
             let config = MotorConfig::<X3dMotorId>::new(Motor {
                 position: vec3a(WIDTH, LENGTH, HEIGHT) / 2.0,
@@ -802,7 +859,7 @@ fn step_accent_points(
                 direction: Direction::Clockwise,
             });
 
-            let score = heuristic::score(&physics(&config), &score_settings.0);
+            let score = heuristic::score(&physics(&config), &score_settings.0.flatten());
 
             point.0 = next_point;
             point.1 = done;
@@ -832,10 +889,90 @@ fn step_accent_points(
     }
 
     if let Some((best, best_score)) = best {
-        let current_score = heuristic::score(&physics(&motor_conf.0), &score_settings.0);
+        let current_score = heuristic::score(&physics(&motor_conf.0), &score_settings.0.flatten());
 
         if (best_score - current_score).abs() > 0.001 {
             commands.insert_resource(MotorConfigRes(best));
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct ToggleableScoreSettings {
+    pub mes_linear: (bool, f32),
+    pub mes_torque: (bool, f32),
+    pub avg_linear: (bool, f32),
+    pub avg_torque: (bool, f32),
+    pub min_linear: (bool, f32),
+    pub min_torque: (bool, f32),
+    pub x: (bool, f32),
+    pub y: (bool, f32),
+    pub z: (bool, f32),
+    pub x_rot: (bool, f32),
+    pub y_rot: (bool, f32),
+    pub z_rot: (bool, f32),
+}
+
+impl ToggleableScoreSettings {
+    pub fn flatten(&self) -> ScoreSettings {
+        ScoreSettings {
+            mes_linear: if self.mes_linear.0 {
+                self.mes_linear.1
+            } else {
+                0.0
+            },
+            mes_torque: if self.mes_torque.0 {
+                self.mes_torque.1
+            } else {
+                0.0
+            },
+            avg_linear: if self.avg_linear.0 {
+                self.avg_linear.1
+            } else {
+                0.0
+            },
+            avg_torque: if self.avg_torque.0 {
+                self.avg_torque.1
+            } else {
+                0.0
+            },
+            min_linear: if self.min_linear.0 {
+                self.min_linear.1
+            } else {
+                0.0
+            },
+            min_torque: if self.min_torque.0 {
+                self.min_torque.1
+            } else {
+                0.0
+            },
+            x: if self.x.0 { self.x.1 } else { 0.0 },
+            y: if self.y.0 { self.y.1 } else { 0.0 },
+            z: if self.z.0 { self.z.1 } else { 0.0 },
+            x_rot: if self.x_rot.0 { self.x_rot.1 } else { 0.0 },
+            y_rot: if self.y_rot.0 { self.y_rot.1 } else { 0.0 },
+            z_rot: if self.z_rot.0 { self.z_rot.1 } else { 0.0 },
+        }
+    }
+}
+
+impl Default for ToggleableScoreSettings {
+    fn default() -> Self {
+        let base = ScoreSettings::default();
+
+        Self {
+            mes_linear: (true, base.mes_linear),
+            mes_torque: (true, base.mes_torque),
+            avg_linear: (true, base.avg_linear),
+            avg_torque: (true, base.avg_torque),
+            min_linear: (true, base.min_linear),
+            min_torque: (true, base.min_torque),
+            x: (true, base.x),
+            y: (true, base.y),
+            z: (true, base.z),
+            x_rot: (true, base.x_rot),
+            y_rot: (true, base.y_rot),
+            z_rot: (true, base.z_rot),
         }
     }
 }
