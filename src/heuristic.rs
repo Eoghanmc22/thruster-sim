@@ -21,18 +21,18 @@ pub struct ScoreSettings {
 impl Default for ScoreSettings {
     fn default() -> Self {
         Self {
-            mes_linear: -1.0,
+            mes_linear: 0.0,
             mes_torque: 0.0,
             avg_linear: 0.0,
             avg_torque: 0.0,
             min_linear: 0.0,
             min_torque: 0.0,
-            x: 1.0,
-            y: 1.0,
-            z: 1.0,
-            x_rot: 1.0,
-            y_rot: 1.0,
-            z_rot: 1.0,
+            x: 0.5,
+            y: 0.5,
+            z: 0.5,
+            x_rot: 0.0,
+            y_rot: 0.0,
+            z_rot: 0.0,
         }
     }
 }
