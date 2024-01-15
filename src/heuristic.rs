@@ -93,19 +93,16 @@ pub fn score(result: &HashMap<PhysicsAxis, PhysicsResult>, settings: &ScoreSetti
         })
         .collect();
 
-    0.0 + mes_linear * settings.mes_linear
-        + mes_torque * settings.mes_torque
-        + min_linear * settings.min_linear
-        + min_torque * settings.min_torque
-        + avg_linear * settings.avg_linear
-        + avg_torque * settings.avg_torque
-        + results[&PhysicsAxis::X] * settings.x
-        + results[&PhysicsAxis::Y] * settings.y
-        + results[&PhysicsAxis::Z] * settings.z
-        + results[&PhysicsAxis::XRot] * settings.x_rot
-        + results[&PhysicsAxis::YRot] * settings.y_rot
-        + results[&PhysicsAxis::ZRot] * settings.z_rot
-    // - 30.0 * (results[&PhysicsAxis::X] - results[&PhysicsAxis::Y]).max(0.0)
-    // - 30.0 * (results[&PhysicsAxis::Y] - results[&PhysicsAxis::Z]).max(0.0)
-    // + 30.0 * (results[&PhysicsAxis::Y] - 4.5)
+    0.0 + settings.x * results[&PhysicsAxis::X]
+        + settings.y * results[&PhysicsAxis::Y]
+        + settings.z * results[&PhysicsAxis::Z]
+        + settings.x_rot * results[&PhysicsAxis::XRot]
+        + settings.y_rot * results[&PhysicsAxis::YRot]
+        + settings.z_rot * results[&PhysicsAxis::ZRot]
+        + settings.mes_linear * mes_linear
+        + settings.mes_torque * mes_torque
+        + settings.min_linear * min_linear
+        + settings.min_torque * min_torque
+        + settings.avg_linear * avg_linear
+        + settings.avg_torque * avg_torque
 }
