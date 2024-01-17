@@ -9,7 +9,7 @@ use bevy::{
         camera::{ScalingMode, Viewport},
         mesh::{shape::Cylinder, Indices},
         render_resource::PrimitiveTopology,
-        view::RenderLayers,
+        view::{screenshot::ScreenshotManager, RenderLayers},
     },
     window::{PresentMode, PrimaryWindow, Window, WindowResized, WindowResolution},
 };
@@ -61,6 +61,7 @@ fn main() {
                 sync_cameras,
                 handle_heuristic_change,
                 step_accent_points,
+                screenshot_on_spacebar,
             ),
         )
         .run();
@@ -1109,5 +1110,26 @@ impl Default for ToggleableScoreSettings {
             y_rot: (true, base.y_rot),
             z_rot: (true, base.z_rot),
         }
+    }
+}
+
+fn screenshot_on_spacebar(
+    input: Res<Input<KeyCode>>,
+    main_window: Query<Entity, With<PrimaryWindow>>,
+    mut screenshot_manager: ResMut<ScreenshotManager>,
+) {
+    if input.just_pressed(KeyCode::Space) {
+        let time =
+            time::OffsetDateTime::now_local().unwrap_or_else(|_| time::OffsetDateTime::now_utc());
+
+        let (year, month, day) = (time.year(), time.month() as u8, time.day());
+        let (hour, minute, second) = (time.hour(), time.minute(), time.second());
+
+        let path = format!(
+            "./screenshot-{year:04}-{month:02}-{day:02} {hour:02}:{minute:02}:{second:02}.png",
+        );
+        screenshot_manager
+            .save_screenshot_to_disk(main_window.single(), path)
+            .unwrap();
     }
 }
