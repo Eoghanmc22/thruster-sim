@@ -304,6 +304,94 @@ fn render_gui(
                     .changed();
             });
 
+            ui.collapsing("MES Linear Goals", |ui| {
+                ui.horizontal(|ui| {
+                    let check = ui.checkbox(&mut settings.mes_x_off.0, "X");
+                    let width = check.rect.width();
+                    ui.allocate_space((text_width - width, 0.0).into());
+
+                    updated |= check.changed();
+                    updated |= ui
+                        .add_enabled(
+                            settings.mes_x_off.0,
+                            Slider::new(&mut settings.mes_x_off.1, -3.0..=3.0),
+                        )
+                        .changed();
+                });
+
+                ui.horizontal(|ui| {
+                    let check = ui.checkbox(&mut settings.mes_y_off.0, "Y");
+                    let width = check.rect.width();
+                    ui.allocate_space((text_width - width, 0.0).into());
+
+                    updated |= check.changed();
+                    updated |= ui
+                        .add_enabled(
+                            settings.mes_y_off.0,
+                            Slider::new(&mut settings.mes_y_off.1, -3.0..=3.0),
+                        )
+                        .changed();
+                });
+
+                ui.horizontal(|ui| {
+                    let check = ui.checkbox(&mut settings.mes_z_off.0, "Z");
+                    let width = check.rect.width();
+                    ui.allocate_space((text_width - width, 0.0).into());
+
+                    updated |= check.changed();
+                    updated |= ui
+                        .add_enabled(
+                            settings.mes_z_off.0,
+                            Slider::new(&mut settings.mes_z_off.1, -3.0..=3.0),
+                        )
+                        .changed();
+                });
+            });
+
+            ui.collapsing("MES Torque Goals", |ui| {
+                ui.horizontal(|ui| {
+                    let check = ui.checkbox(&mut settings.mes_x_rot_off.0, "X");
+                    let width = check.rect.width();
+                    ui.allocate_space((text_width - width, 0.0).into());
+
+                    updated |= check.changed();
+                    updated |= ui
+                        .add_enabled(
+                            settings.mes_x_rot_off.0,
+                            Slider::new(&mut settings.mes_x_rot_off.1, -2.0..=2.0),
+                        )
+                        .changed();
+                });
+
+                ui.horizontal(|ui| {
+                    let check = ui.checkbox(&mut settings.mes_y_rot_off.0, "Y");
+                    let width = check.rect.width();
+                    ui.allocate_space((text_width - width, 0.0).into());
+
+                    updated |= check.changed();
+                    updated |= ui
+                        .add_enabled(
+                            settings.mes_y_rot_off.0,
+                            Slider::new(&mut settings.mes_y_rot_off.1, -2.0..=2.0),
+                        )
+                        .changed();
+                });
+
+                ui.horizontal(|ui| {
+                    let check = ui.checkbox(&mut settings.mes_z_rot_off.0, "Z");
+                    let width = check.rect.width();
+                    ui.allocate_space((text_width - width, 0.0).into());
+
+                    updated |= check.changed();
+                    updated |= ui
+                        .add_enabled(
+                            settings.mes_z_rot_off.0,
+                            Slider::new(&mut settings.mes_z_rot_off.1, -2.0..=2.0),
+                        )
+                        .changed();
+                });
+            });
+
             ui.horizontal(|ui| {
                 let check = ui.checkbox(&mut settings.min_linear.0, "Min Linear");
                 let width = check.rect.width();
@@ -900,14 +988,25 @@ fn step_accent_points(
 #[derive(Clone)]
 pub struct ToggleableScoreSettings {
     pub mes_linear: (bool, f32),
+    pub mes_x_off: (bool, f32),
+    pub mes_y_off: (bool, f32),
+    pub mes_z_off: (bool, f32),
+
     pub mes_torque: (bool, f32),
+    pub mes_x_rot_off: (bool, f32),
+    pub mes_y_rot_off: (bool, f32),
+    pub mes_z_rot_off: (bool, f32),
+
     pub avg_linear: (bool, f32),
     pub avg_torque: (bool, f32),
+
     pub min_linear: (bool, f32),
     pub min_torque: (bool, f32),
+
     pub x: (bool, f32),
     pub y: (bool, f32),
     pub z: (bool, f32),
+
     pub x_rot: (bool, f32),
     pub y_rot: (bool, f32),
     pub z_rot: (bool, f32),
@@ -921,10 +1020,40 @@ impl ToggleableScoreSettings {
             } else {
                 0.0
             },
+            mes_x_off: if self.mes_x_off.0 {
+                self.mes_x_off.1
+            } else {
+                -1.0
+            },
+            mes_y_off: if self.mes_y_off.0 {
+                self.mes_y_off.1
+            } else {
+                -1.0
+            },
+            mes_z_off: if self.mes_z_off.0 {
+                self.mes_z_off.1
+            } else {
+                -1.0
+            },
             mes_torque: if self.mes_torque.0 {
                 self.mes_torque.1
             } else {
                 0.0
+            },
+            mes_x_rot_off: if self.mes_x_rot_off.0 {
+                self.mes_x_rot_off.1
+            } else {
+                -1.0
+            },
+            mes_y_rot_off: if self.mes_y_rot_off.0 {
+                self.mes_y_rot_off.1
+            } else {
+                -1.0
+            },
+            mes_z_rot_off: if self.mes_z_rot_off.0 {
+                self.mes_z_rot_off.1
+            } else {
+                -1.0
             },
             avg_linear: if self.avg_linear.0 {
                 self.avg_linear.1
@@ -962,7 +1091,13 @@ impl Default for ToggleableScoreSettings {
 
         Self {
             mes_linear: (true, base.mes_linear),
+            mes_x_off: (true, base.mes_x_off),
+            mes_y_off: (true, base.mes_y_off),
+            mes_z_off: (true, base.mes_z_off),
             mes_torque: (true, base.mes_torque),
+            mes_x_rot_off: (true, base.mes_x_rot_off),
+            mes_y_rot_off: (true, base.mes_y_rot_off),
+            mes_z_rot_off: (true, base.mes_z_rot_off),
             avg_linear: (true, base.avg_linear),
             avg_torque: (true, base.avg_torque),
             min_linear: (true, base.min_linear),
