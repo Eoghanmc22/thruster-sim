@@ -1,5 +1,5 @@
 use bevy::math::{vec3a, Quat, Vec3A};
-use motor_math::{x3d::X3dMotorId, Direction, Motor, MotorConfig};
+use motor_math::{motor_preformance::MotorData, x3d::X3dMotorId, Direction, Motor, MotorConfig};
 
 use crate::{
     heuristic::{score, ScoreSettings},
@@ -25,7 +25,12 @@ pub fn fibonacci_sphere(samples: usize) -> Vec<Vec3A> {
     points
 }
 
-pub fn accent_sphere(scale: f32, point: Vec3A, settings: &ScoreSettings) -> (Vec3A, bool) {
+pub fn accent_sphere(
+    scale: f32,
+    point: Vec3A,
+    settings: &ScoreSettings,
+    motor_data: &MotorData,
+) -> (Vec3A, bool) {
     let steps = [
         Quat::IDENTITY,
         Quat::from_rotation_x(scale),
@@ -59,13 +64,16 @@ pub fn accent_sphere(scale: f32, point: Vec3A, settings: &ScoreSettings) -> (Vec
     for (idx, step) in steps.into_iter().enumerate() {
         let new_point = step * point;
 
-        let motor_config = MotorConfig::<X3dMotorId>::new(Motor {
-            orientation: new_point,
-            position: vec3a(WIDTH / 2.0, LENGTH / 2.0, HEIGHT / 2.0),
-            direction: Direction::Clockwise,
-        });
+        let motor_config = MotorConfig::<X3dMotorId>::new(
+            Motor {
+                orientation: new_point,
+                position: vec3a(WIDTH / 2.0, LENGTH / 2.0, HEIGHT / 2.0),
+                direction: Direction::Clockwise,
+            },
+            vec3a(0.0, 0.0, 0.0),
+        );
 
-        let result = physics(&motor_config);
+        let result = physics(&motor_config, motor_data, true);
         let score = score(&result, settings);
 
         if score > best.1 {

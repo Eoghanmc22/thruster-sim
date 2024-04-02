@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use bevy::math::{vec3a, Vec3A};
 use itertools::Itertools;
-use motor_math::{x3d::X3dMotorId, Direction, Motor, MotorConfig};
+use motor_math::{motor_preformance, x3d::X3dMotorId, Direction, Motor, MotorConfig};
 use thruster_sim::{
     heuristic::score,
     optimize::{accent_sphere, fibonacci_sphere},
@@ -14,13 +14,15 @@ const STEP: f32 = 0.001;
 const SIMILARITY: f32 = 0.05;
 
 fn main() {
+    let motor_data = motor_preformance::read_motor_data("motor_data.csv").expect("Read motor data");
+
     let mut points = fibonacci_sphere(1000);
     let mut solved_points = Vec::new();
     let mut counter = 0;
 
     while !points.is_empty() {
         points.retain_mut(|point| {
-            let (new_point, solved) = accent_sphere(STEP, *point, &Default::default());
+            let (new_point, solved) = accent_sphere(STEP, *point, &Default::default(), &motor_data);
 
             if solved {
                 solved_points.push(new_point);
@@ -43,11 +45,18 @@ fn main() {
             (
                 point,
                 score(
-                    &physics(&MotorConfig::<X3dMotorId>::new(Motor {
-                        orientation: point,
-                        position: vec3a(WIDTH / 2.0, LENGTH / 2.0, HEIGHT / 2.0),
-                        direction: Direction::Clockwise,
-                    })),
+                    &physics(
+                        &MotorConfig::<X3dMotorId>::new(
+                            Motor {
+                                orientation: point,
+                                position: vec3a(WIDTH / 2.0, LENGTH / 2.0, HEIGHT / 2.0),
+                                direction: Direction::Clockwise,
+                            },
+                            vec3a(0.0, 0.0, 0.0),
+                        ),
+                        &motor_data,
+                        true,
+                    ),
                     &Default::default(),
                 ),
             )
@@ -75,13 +84,16 @@ fn main() {
     }
 
     for point in deduped_points.into_iter().take(5) {
-        let motor_config = MotorConfig::<X3dMotorId>::new(Motor {
-            orientation: point.0,
-            position: vec3a(WIDTH / 2.0, LENGTH / 2.0, HEIGHT / 2.0),
-            direction: Direction::Clockwise,
-        });
+        let motor_config = MotorConfig::<X3dMotorId>::new(
+            Motor {
+                orientation: point.0,
+                position: vec3a(WIDTH / 2.0, LENGTH / 2.0, HEIGHT / 2.0),
+                direction: Direction::Clockwise,
+            },
+            vec3a(0.0, 0.0, 0.0),
+        );
 
-        let result = physics(&motor_config);
+        let result = physics(&motor_config, &motor_data, true);
         let result: BTreeMap<_, _> = result.into_iter().collect();
 
         println!("{point:+.3?}, {result:+.3?}");
