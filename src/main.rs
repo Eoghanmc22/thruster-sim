@@ -171,7 +171,7 @@ fn setup(
     let motor_conf = MotorConfig::<X3dMotorId>::new(
         Motor {
             position: vec3a(WIDTH, LENGTH, HEIGHT) / 2.0,
-            orientation: vec3a(-0.254, -0.571, -0.781).normalize(),
+            orientation: vec3a(-0.254, 0.571, -0.781).normalize(),
             direction: Direction::Clockwise,
         },
         vec3a(0.0, 0.0, 0.0),
@@ -874,7 +874,7 @@ fn make_strength_mesh(
                 ratio
             };
 
-            ratio * 0.01 * type_ratio
+            ratio * 0.015 * type_ratio
         } else {
             let mut forces = reverse::reverse_solve(movement, motor_config);
 
@@ -884,7 +884,7 @@ fn make_strength_mesh(
             };
 
             let force_length = forces.values().map(|it| it * it).sum::<f32>();
-            let adjustment = type_ratio * 0.305 / force_length.sqrt();
+            let adjustment = type_ratio * 0.458 / force_length.sqrt();
             forces.values_mut().for_each(|it| *it *= adjustment);
 
             let adjusted_movement = forward::forward_solve(motor_config, &forces);
@@ -1260,21 +1260,21 @@ fn auto_generate_constraints(
     match *auto_generate {
         AutoGenerate::Randomize => {
             score_settings.0 = ToggleableScoreSettings {
-                mes_linear: (rand::random(), rand::random::<f32>() * 2.0 - 1.0),
+                mes_linear: (rand::random(), rand::random::<f32>() - 0.5),
                 mes_x_off: (rand::random(), rand::random::<f32>() * 2.0 - 1.0),
                 mes_y_off: (rand::random(), rand::random::<f32>() * 2.0 - 1.0),
                 mes_z_off: (rand::random(), rand::random::<f32>() * 2.0 - 1.0),
-                mes_torque: (rand::random(), rand::random::<f32>() * 2.0 - 1.0),
+                mes_torque: (rand::random(), rand::random::<f32>() - 0.5),
                 mes_x_rot_off: (rand::random(), rand::random::<f32>() * 2.0 - 1.0),
                 mes_y_rot_off: (rand::random(), rand::random::<f32>() * 2.0 - 1.0),
                 mes_z_rot_off: (rand::random(), rand::random::<f32>() * 2.0 - 1.0),
-                avg_linear: (rand::random(), rand::random()),
+                avg_linear: (rand::random(), rand::random::<f32>() / 2.0 + 0.15),
                 avg_torque: (rand::random(), rand::random()),
-                min_linear: (rand::random(), rand::random()),
+                min_linear: (rand::random(), rand::random::<f32>() / 2.0 + 0.15),
                 min_torque: (rand::random(), rand::random()),
-                x: (rand::random(), rand::random::<f32>() / 2.0 + 0.25),
-                y: (rand::random(), rand::random::<f32>() / 2.0 + 0.25),
-                z: (rand::random(), rand::random::<f32>() / 2.0 + 0.25),
+                x: (rand::random(), rand::random::<f32>() / 2.0 + 0.15),
+                y: (rand::random(), rand::random::<f32>() / 2.0 + 0.15),
+                z: (rand::random(), rand::random::<f32>() / 2.0 + 0.15),
                 x_rot: (rand::random(), rand::random::<f32>() / 2.0 + 0.25),
                 y_rot: (rand::random(), rand::random::<f32>() / 2.0 + 0.25),
                 z_rot: (rand::random(), rand::random::<f32>() / 2.0 + 0.25),
@@ -1301,6 +1301,7 @@ fn auto_generate_constraints(
                 for mut camera in &mut cameras {
                     camera.target_yaw +=
                         360f32.to_radians() / rotate_duration.as_secs_f32() * time.delta_seconds();
+                    camera.target_yaw %= 360.0
                 }
             }
 
