@@ -2,13 +2,13 @@ pub mod heuristic;
 pub mod optimize;
 
 use ahash::HashMap;
-use bevy::math::Vec3A;
 use motor_math::{
     motor_preformance::MotorData,
     solve::{forward, reverse},
     x3d::X3dMotorId,
-    MotorConfig, Movement,
+    MotorConfig, Movement, Number,
 };
+use nalgebra::vector;
 
 pub const WIDTH: f32 = 0.19 * 2.0;
 pub const LENGTH: f32 = 0.22 * 2.0;
@@ -25,58 +25,58 @@ pub enum PhysicsAxis {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub enum PhysicsResult {
-    Linear(f32),
-    Torque(f32),
+pub enum PhysicsResult<D> {
+    Linear(D),
+    Torque(D),
 }
 
-pub fn physics(
-    motor_config: &MotorConfig<X3dMotorId>,
+pub fn physics<D: Number>(
+    motor_config: &MotorConfig<X3dMotorId, D>,
     motor_data: &MotorData,
     fast: bool,
-) -> HashMap<PhysicsAxis, PhysicsResult> {
+) -> HashMap<PhysicsAxis, PhysicsResult<D>> {
     // Why is axes the plural of axis
     let axes = [
         (
             PhysicsAxis::X,
             Movement {
-                force: Vec3A::X,
-                torque: Vec3A::ZERO,
+                force: vector![D::one(), D::zero(), D::zero()],
+                torque: vector![D::zero(), D::zero(), D::zero()],
             },
         ),
         (
             PhysicsAxis::Y,
             Movement {
-                force: Vec3A::Y,
-                torque: Vec3A::ZERO,
+                force: vector![D::zero(), D::one(), D::zero()],
+                torque: vector![D::zero(), D::zero(), D::zero()],
             },
         ),
         (
             PhysicsAxis::Z,
             Movement {
-                force: Vec3A::Z,
-                torque: Vec3A::ZERO,
+                force: vector![D::zero(), D::zero(), D::one()],
+                torque: vector![D::zero(), D::zero(), D::zero()],
             },
         ),
         (
             PhysicsAxis::XRot,
             Movement {
-                force: Vec3A::ZERO,
-                torque: Vec3A::X,
+                force: vector![D::zero(), D::zero(), D::zero()],
+                torque: vector![D::one(), D::zero(), D::zero()],
             },
         ),
         (
             PhysicsAxis::YRot,
             Movement {
-                force: Vec3A::ZERO,
-                torque: Vec3A::Y,
+                force: vector![D::zero(), D::zero(), D::zero()],
+                torque: vector![D::zero(), D::one(), D::zero()],
             },
         ),
         (
             PhysicsAxis::ZRot,
             Movement {
-                force: Vec3A::ZERO,
-                torque: Vec3A::Z,
+                force: vector![D::zero(), D::zero(), D::zero()],
+                torque: vector![D::zero(), D::zero(), D::one()],
             },
         ),
     ];
@@ -87,18 +87,18 @@ pub fn physics(
         let value = if fast {
             let mut forces = reverse::reverse_solve(movement, motor_config);
 
-            let force_length = forces.values().map(|it| it * it).sum::<f32>().sqrt();
-            let adjustment = if force_length > 0.01 {
-                1.0 / force_length
+            let force_length = forces.values().map(|it| *it * *it).sum::<D>().sqrt();
+            let adjustment = if force_length.re() > 0.01 {
+                D::one() / force_length
             } else {
-                0.0
+                D::zero()
             };
             forces.values_mut().for_each(|it| *it *= adjustment);
 
             let adjusted_movement = forward::forward_solve(motor_config, &forces);
 
-            adjusted_movement.force.dot(movement.force).abs()
-                + adjusted_movement.torque.dot(movement.torque).abs()
+            adjusted_movement.force.dot(&movement.force).abs()
+                + adjusted_movement.torque.dot(&movement.torque).abs()
         } else {
             let forces = reverse::reverse_solve(movement, motor_config);
 
@@ -111,8 +111,8 @@ pub fn physics(
                 0.05,
             );
 
-            if ratio > 100.0 {
-                0.0
+            if ratio.re() > 100.0 {
+                D::zero()
             } else {
                 ratio
             }
