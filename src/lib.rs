@@ -1,7 +1,8 @@
 pub mod heuristic;
 pub mod optimize;
 
-use ahash::HashMap;
+use std::{collections::HashMap, hash::BuildHasherDefault};
+
 use motor_math::{
     motor_preformance::MotorData,
     solve::{forward, reverse},
@@ -9,10 +10,14 @@ use motor_math::{
     MotorConfig, Movement, Number,
 };
 use nalgebra::vector;
+use stable_hashmap::StableHashMap;
 
 pub const WIDTH: f32 = 0.19 * 2.0;
 pub const LENGTH: f32 = 0.22 * 2.0;
 pub const HEIGHT: f32 = 0.09 * 2.0;
+// pub const WIDTH: f32 = 0.2 * 2.0;
+// pub const LENGTH: f32 = 0.2 * 2.0;
+// pub const HEIGHT: f32 = 0.2 * 2.0;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum PhysicsAxis {
@@ -34,7 +39,7 @@ pub fn physics<D: Number>(
     motor_config: &MotorConfig<X3dMotorId, D>,
     motor_data: &MotorData,
     fast: bool,
-) -> HashMap<PhysicsAxis, PhysicsResult<D>> {
+) -> StableHashMap<PhysicsAxis, PhysicsResult<D>> {
     // Why is axes the plural of axis
     let axes = [
         (

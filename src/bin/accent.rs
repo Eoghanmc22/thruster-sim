@@ -1,6 +1,5 @@
 use std::collections::BTreeMap;
 
-use bevy::math::{vec3a, Vec3A};
 use itertools::Itertools;
 use motor_math::{motor_preformance, x3d::X3dMotorId, Direction, Motor, MotorConfig};
 use nalgebra::{vector, Vector3};
@@ -10,14 +9,17 @@ use thruster_sim::{
     physics, HEIGHT, LENGTH, WIDTH,
 };
 
-const STEP: f32 = 0.1;
+// For fast physics
+const STEP: f32 = 0.385;
+// For slow physics
+// const STEP: f32 = 0.01;
 // const STEP: f64 = 0.001;
 const SIMILARITY: f32 = 0.05;
 
 fn main() {
     let motor_data = motor_preformance::read_motor_data("motor_data.csv").expect("Read motor data");
 
-    let mut points = fibonacci_sphere(1000);
+    let mut points = fibonacci_sphere(20);
     // let mut points = vec![vector![0.2, 0.4, 0.7].normalize()];
     let mut solved_points = Vec::new();
     let mut counter = 0;
@@ -27,7 +29,9 @@ fn main() {
             let (new_point, solved) = accent_sphere(STEP, *point, &Default::default(), &motor_data);
 
             if solved {
-                solved_points.push(new_point);
+                if !new_point.norm_squared().is_nan() {
+                    solved_points.push(new_point);
+                }
                 false
             } else {
                 *point = new_point;

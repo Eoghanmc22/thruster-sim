@@ -2586,8 +2586,8 @@ dependencies = [
 [[package]]
 name = "motor_math"
 version = "0.1.0"
+source = "git+https://github.com/Eoghanmc22/mate-rov-2025.git#f023c7c4446aad98e66950c489364cceb7a121bc"
 dependencies = [
- "ahash",
  "anyhow",
  "bevy_reflect",
  "csv",
@@ -2596,6 +2596,7 @@ dependencies = [
  "num-dual",
  "num_enum",
  "serde",
+ "stable_hashmap",
  "tracing",
 ]
 
@@ -3737,6 +3738,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "stable_hashmap"
+version = "0.1.0"
+source = "git+https://github.com/Eoghanmc22/mate-rov-2025.git#f023c7c4446aad98e66950c489364cceb7a121bc"
+dependencies = [
+ "ahash",
+]
+
+[[package]]
 name = "static_assertions"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3832,7 +3841,6 @@ dependencies = [
 name = "thruster-sim"
 version = "0.1.0"
 dependencies = [
- "ahash",
  "anyhow",
  "bevy",
  "bevy_egui",
@@ -3845,6 +3853,7 @@ dependencies = [
  "num-dual",
  "rand",
  "serde",
+ "stable_hashmap",
  "time",
 ]
 

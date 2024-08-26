@@ -32,63 +32,6 @@ pub fn accent_sphere(
     settings: &ScoreSettings,
     motor_data: &MotorData,
 ) -> (Vector3<f32>, bool) {
-    // let steps = [
-    //     Quat::IDENTITY,
-    //     Quat::from_rotation_x(step),
-    //     Quat::from_rotation_x(-step),
-    //     Quat::from_rotation_y(step),
-    //     Quat::from_rotation_y(-step),
-    //     Quat::from_rotation_z(step),
-    //     Quat::from_rotation_z(-step),
-    //     // Quat::from_rotation_x(scale * 10.0),
-    //     // Quat::from_rotation_x(-scale * 10.0),
-    //     // Quat::from_rotation_y(scale * 10.0),
-    //     // Quat::from_rotation_y(-scale * 10.0),
-    //     // Quat::from_rotation_z(scale * 10.0),
-    //     // Quat::from_rotation_z(-scale * 10.0),
-    //     // Quat::from_rotation_x(scale / 10.0),
-    //     // Quat::from_rotation_x(-scale / 10.0),
-    //     // Quat::from_rotation_y(scale / 10.0),
-    //     // Quat::from_rotation_y(-scale / 10.0),
-    //     // Quat::from_rotation_z(scale / 10.0),
-    //     // Quat::from_rotation_z(-scale / 10.0),
-    //     // Quat::from_rotation_x(scale / 100.0),
-    //     // Quat::from_rotation_x(-scale / 100.0),
-    //     // Quat::from_rotation_y(scale / 100.0),
-    //     // Quat::from_rotation_y(-scale / 100.0),
-    //     // Quat::from_rotation_z(scale / 100.0),
-    //     // Quat::from_rotation_z(-scale / 100.0),
-    // ];
-    //
-    // let mut best = (0, f32::NEG_INFINITY, Vec3A::ZERO);
-    //
-    // for (idx, step) in steps.into_iter().enumerate() {
-    //     let new_point = step * point;
-    //
-    //     let motor_config = MotorConfig::<X3dMotorId>::new(
-    //         Motor {
-    //             orientation: new_point,
-    //             position: vec3a(WIDTH / 2.0, LENGTH / 2.0, HEIGHT / 2.0),
-    //             direction: Direction::Clockwise,
-    //         },
-    //         vec3a(0.0, 0.0, 0.0),
-    //     );
-    //
-    //     let result = physics(&motor_config, motor_data, true);
-    //     let score = score(&result, settings);
-    //
-    //     if score > best.1 {
-    //         best = (idx, score, new_point);
-    //     }
-    //
-    //     // Only reachable on first iteration, used to cull search space
-    //     if idx == 0 && score == f32::NEG_INFINITY {
-    //         return (Vec3A::ZERO, true);
-    //     }
-    // }
-    //
-    // (best.2, best.0 == 0 || best.1 == f32::NEG_INFINITY)
-
     let (_old_score, grad) = gradient(
         |point| {
             let motor_config = MotorConfig::<X3dMotorId, _>::new(
@@ -111,11 +54,12 @@ pub fn accent_sphere(
     );
 
     let constrained_grad = grad - grad.dot(&point) * point;
+    // println!("cg {:?}", step * constrained_grad);
 
-    // let new_point = point - step * grad;
     let new_point = point + step * constrained_grad;
     let new_point = new_point.normalize();
-    // println!("{point:.4?} -> {new_point:.4?}, {constrained_grad:.4?}");
 
-    (new_point, constrained_grad.norm_squared() < 0.0001)
+    let norm_2 = constrained_grad.norm_squared();
+    // (new_point, norm_2.is_nan() || norm_2 < 0.000001)
+    (new_point, norm_2.is_nan() || norm_2 < 0.01)
 }

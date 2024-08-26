@@ -1,5 +1,7 @@
-use ahash::HashMap;
+use std::{collections::HashMap, hash::BuildHasherDefault};
+
 use motor_math::Number;
+use stable_hashmap::StableHashMap;
 
 use crate::{PhysicsAxis, PhysicsResult};
 
@@ -56,7 +58,7 @@ impl Default for ScoreSettings {
 }
 
 pub fn score<D: Number>(
-    result: &HashMap<PhysicsAxis, PhysicsResult<D>>,
+    result: &StableHashMap<PhysicsAxis, PhysicsResult<D>>,
     settings: &ScoreSettings,
 ) -> D {
     // Average and min
@@ -93,9 +95,9 @@ pub fn score<D: Number>(
         };
         let offset = D::from(offset);
 
-        let (val, avg) = match result {
-            &PhysicsResult::Linear(val) => (val, avg_linear),
-            &PhysicsResult::Torque(val) => (val, avg_torque),
+        let (val, avg) = match *result {
+            PhysicsResult::Linear(val) => (val, avg_linear),
+            PhysicsResult::Torque(val) => (val, avg_torque),
         };
 
         let goal = if offset.re() > 0.0 {
@@ -106,9 +108,9 @@ pub fn score<D: Number>(
             val
         };
 
-        match result {
-            &PhysicsResult::Linear(val) => mes_linear += (val - goal) * (val - goal),
-            &PhysicsResult::Torque(val) => mes_torque += (val - goal) * (val - goal),
+        match *result {
+            PhysicsResult::Linear(val) => mes_linear += (val - goal) * (val - goal),
+            PhysicsResult::Torque(val) => mes_torque += (val - goal) * (val - goal),
         }
     }
 
@@ -130,7 +132,7 @@ pub fn score<D: Number>(
     // };
 
     // Per axis values
-    let results: HashMap<PhysicsAxis, D> = result
+    let results: StableHashMap<PhysicsAxis, D> = result
         .iter()
         .map(|(axis, result)| match result {
             &PhysicsResult::Linear(value) | &PhysicsResult::Torque(value) => (*axis, value.abs()),
