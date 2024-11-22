@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use itertools::Itertools;
-use motor_math::{motor_preformance, x3d::X3dMotorId, Direction, Motor, MotorConfig};
+use motor_math::{motor_preformance, x3d::X3dMotorId, Direction, FloatType, Motor, MotorConfig};
 use nalgebra::{vector, Vector3};
 use thruster_sim::{
     heuristic::score,
@@ -10,16 +10,16 @@ use thruster_sim::{
 };
 
 // For fast physics
-const STEP: f32 = 0.385;
+// const STEP: f32 = 0.385;
 // For slow physics
 // const STEP: f32 = 0.01;
-// const STEP: f64 = 0.001;
-const SIMILARITY: f32 = 0.05;
+const STEP: FloatType = 0.001;
+const SIMILARITY: FloatType = 0.05;
 
 fn main() {
     let motor_data = motor_preformance::read_motor_data("motor_data.csv").expect("Read motor data");
 
-    let mut points = fibonacci_sphere(20);
+    let mut points = fibonacci_sphere(10);
     // let mut points = vec![vector![0.2, 0.4, 0.7].normalize()];
     let mut solved_points = Vec::new();
     let mut counter = 0;
@@ -53,7 +53,7 @@ fn main() {
                 point,
                 score(
                     &physics(
-                        &MotorConfig::<X3dMotorId, f32>::new(
+                        &MotorConfig::<X3dMotorId, FloatType>::new(
                             Motor {
                                 orientation: point,
                                 position: vector![WIDTH / 2.0, LENGTH / 2.0, HEIGHT / 2.0],
@@ -68,12 +68,13 @@ fn main() {
                 ),
             )
         })
-        .filter(|(_, score)| *score != f32::NEG_INFINITY)
+        .filter(|(_, score)| *score != FloatType::NEG_INFINITY)
         .collect_vec();
 
-    scored_points.sort_by(|(_, score_a), (_, score_b)| f32::total_cmp(score_a, score_b).reverse());
+    scored_points
+        .sort_by(|(_, score_a), (_, score_b)| FloatType::total_cmp(score_a, score_b).reverse());
 
-    let mut deduped_points: Vec<(Vector3<f32>, f32)> = Vec::new();
+    let mut deduped_points: Vec<(Vector3<FloatType>, FloatType)> = Vec::new();
     'outer: for (new_point, score) in scored_points {
         for (existing_point, _score) in &deduped_points {
             let delta = (new_point - *existing_point).norm();
@@ -91,7 +92,7 @@ fn main() {
     }
 
     for point in deduped_points.into_iter().take(5) {
-        let motor_config = MotorConfig::<X3dMotorId, f32>::new(
+        let motor_config = MotorConfig::<X3dMotorId, FloatType>::new(
             Motor {
                 orientation: point.0,
                 position: vector![WIDTH / 2.0, LENGTH / 2.0, HEIGHT / 2.0],

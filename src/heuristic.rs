@@ -1,35 +1,35 @@
 use std::{collections::HashMap, hash::BuildHasherDefault};
 
-use motor_math::Number;
+use motor_math::{FloatType, Number};
 use stable_hashmap::StableHashMap;
 
 use crate::{PhysicsAxis, PhysicsResult};
 
 #[derive(Clone)]
 pub struct ScoreSettings {
-    pub mes_linear: f32,
-    pub mes_x_off: f32,
-    pub mes_y_off: f32,
-    pub mes_z_off: f32,
+    pub mes_linear: FloatType,
+    pub mes_x_off: FloatType,
+    pub mes_y_off: FloatType,
+    pub mes_z_off: FloatType,
 
-    pub mes_torque: f32,
-    pub mes_x_rot_off: f32,
-    pub mes_y_rot_off: f32,
-    pub mes_z_rot_off: f32,
+    pub mes_torque: FloatType,
+    pub mes_x_rot_off: FloatType,
+    pub mes_y_rot_off: FloatType,
+    pub mes_z_rot_off: FloatType,
 
-    pub avg_linear: f32,
-    pub avg_torque: f32,
+    pub avg_linear: FloatType,
+    pub avg_torque: FloatType,
 
-    pub min_linear: f32,
-    pub min_torque: f32,
+    pub min_linear: FloatType,
+    pub min_torque: FloatType,
 
-    pub x: f32,
-    pub y: f32,
-    pub z: f32,
+    pub x: FloatType,
+    pub y: FloatType,
+    pub z: FloatType,
 
-    pub x_rot: f32,
-    pub y_rot: f32,
-    pub z_rot: f32,
+    pub x_rot: FloatType,
+    pub y_rot: FloatType,
+    pub z_rot: FloatType,
 }
 
 impl Default for ScoreSettings {
@@ -64,8 +64,8 @@ pub fn score<D: Number>(
     // Average and min
     let mut avg_linear = D::from(0.0);
     let mut avg_torque = D::from(0.0);
-    let mut min_linear = D::from(f32::INFINITY);
-    let mut min_torque = D::from(f32::INFINITY);
+    let mut min_linear = D::from(FloatType::INFINITY);
+    let mut min_torque = D::from(FloatType::INFINITY);
 
     for result in result.values() {
         match result {

@@ -7,14 +7,14 @@ use motor_math::{
     motor_preformance::MotorData,
     solve::{forward, reverse},
     x3d::X3dMotorId,
-    MotorConfig, Movement, Number,
+    FloatType, MotorConfig, Movement, Number,
 };
 use nalgebra::vector;
 use stable_hashmap::StableHashMap;
 
-pub const WIDTH: f32 = 0.19 * 2.0;
-pub const LENGTH: f32 = 0.22 * 2.0;
-pub const HEIGHT: f32 = 0.09 * 2.0;
+pub const WIDTH: FloatType = 0.19 * 2.0;
+pub const LENGTH: FloatType = 0.22 * 2.0;
+pub const HEIGHT: FloatType = 0.09 * 2.0;
 // pub const WIDTH: f32 = 0.2 * 2.0;
 // pub const LENGTH: f32 = 0.2 * 2.0;
 // pub const HEIGHT: f32 = 0.2 * 2.0;
@@ -92,9 +92,9 @@ pub fn physics<D: Number>(
         let value = if fast {
             let mut forces = reverse::reverse_solve(movement, motor_config);
 
-            let force_length = forces.values().map(|it| *it * *it).sum::<D>().sqrt();
-            let adjustment = if force_length.re() > 0.01 {
-                D::one() / force_length
+            let force_length_2 = forces.values().map(|it| *it * *it).sum::<D>().sqrt();
+            let adjustment = if force_length_2.re() > 0.01 {
+                D::one() / force_length_2
             } else {
                 D::zero()
             };
