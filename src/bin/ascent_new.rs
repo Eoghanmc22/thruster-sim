@@ -5,13 +5,16 @@ use core::f64;
 
 use motor_math::{
     motor_preformance::{self, MotorData},
-    solve::reverse::{self, Axis},
+    solve::reverse,
     x3d::X3dMotorId,
     Direction, ErasedMotorId, FloatType, Motor, MotorConfig, Number,
 };
 use nalgebra::{vector, SVector};
 use num_dual::gradient;
-use thruster_sim::{heuristic::ScoreSettings, optimize};
+use thruster_sim::{
+    heuristic::ScoreSettings,
+    optimize::{self, fibonacci_sphere},
+};
 
 pub const STEP_SIZE: FloatType = 0.1;
 pub const DIMENSIONALITY: usize = 3;
@@ -54,28 +57,13 @@ fn main() {
         println!(
             "score: {:.02}, performance: {:?}",
             result.old_score,
-            reverse::axis_maximums(&motor_config(result.new_point), &motor_data, 1.0, 0.05)
+            reverse::axis_maximums(&motor_config(result.new_point), &motor_data, 1.0, 0.01)
         );
     }
 }
 
 pub fn initial_points(count: usize) -> Vec<Point<FloatType>> {
-    let mut points = Vec::new();
-    let phi = (f64::consts::PI * (5f64.sqrt() - 1.0)) as FloatType; // golden angle in radians
-
-    for i in 0..count {
-        let y = 1.0 - (i as FloatType / (count as FloatType - 1.0)) * 2.0; // y goes from 1 to -1
-        let radius = (1.0 - y * y).sqrt(); // radius at y
-
-        let theta = phi * i as FloatType; // golden angle increment
-
-        let x = theta.cos() * radius;
-        let z = theta.sin() * radius;
-
-        points.push(vector![x, y, z]);
-    }
-
-    points
+    optimize::fibonacci_sphere(count)
 }
 
 pub fn motor_config<D: Number>(point: Point<D>) -> MotorConfig<ErasedMotorId, D> {

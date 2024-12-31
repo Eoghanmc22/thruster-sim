@@ -23,12 +23,14 @@ use motor_math::{
     motor_preformance::{self, MotorData},
     solve::{forward, reverse},
     x3d::X3dMotorId,
-    Direction, Motor, MotorConfig, Movement,
+    Direction, FloatType, Motor, MotorConfig, Movement, Number,
 };
+use nalgebra::{vector, SVector, Vector3};
+use num_dual::gradient;
 use thruster_sim::{
     heuristic::{self, ScoreSettings},
-    optimize::{accent_sphere, fibonacci_sphere},
-    physics, HEIGHT, LENGTH, WIDTH,
+    optimize::{self, fibonacci_sphere},
+    HEIGHT, LENGTH, WIDTH,
 };
 
 fn main() {
@@ -47,7 +49,7 @@ fn main() {
             PanOrbitCameraPlugin,
             EguiPlugin,
             LogDiagnosticsPlugin::default(),
-            FrameTimeDiagnosticsPlugin::default(),
+            FrameTimeDiagnosticsPlugin,
         ))
         .insert_gizmo_group(
             AxisGizmo,
@@ -87,7 +89,7 @@ struct ThrustGizmo;
 struct AxisGizmo;
 
 #[derive(Resource)]
-struct MotorConfigRes(MotorConfig<X3dMotorId>);
+struct MotorConfigRes(MotorConfig<X3dMotorId, FloatType>);
 #[derive(Resource)]
 pub struct MotorDataRes(pub MotorData);
 #[derive(Resource)]
@@ -116,7 +118,7 @@ enum StrengthMesh {
 }
 
 #[derive(Component)]
-struct AccentPoint(Vec3A, bool, f32);
+struct AccentPoint(Point<FloatType>, bool, f32);
 
 #[derive(Component)]
 struct CurrentConfig;
@@ -168,13 +170,13 @@ fn setup(
     score_settings: Res<ScoreSettingsRes>,
     power_compensated: Res<PowerCompensated>,
 ) {
-    let motor_conf = MotorConfig::<X3dMotorId>::new(
+    let motor_conf = MotorConfig::<X3dMotorId, FloatType>::new(
         Motor {
-            position: vec3a(WIDTH, LENGTH, HEIGHT) / 2.0,
-            orientation: vec3a(-0.254, 0.571, -0.781).normalize(),
+            position: vector![WIDTH, LENGTH, HEIGHT] / 2.0,
+            orientation: vector![-0.254, 0.571, -0.781].normalize(),
             direction: Direction::Clockwise,
         },
-        vec3a(0.0, 0.0, 0.0),
+        vector![0.0, 0.0, 0.0],
     );
 
     add_motor_conf(
@@ -572,15 +574,7 @@ fn render_gui(
         });
 
         ui.collapsing("Physics Result", |ui| {
-            ui.collapsing("Fast Physics Result", |ui| {
-                let physics_result = physics(&motor_conf.0, &motor_data.0, true);
-                let physics_result: BTreeMap<_, _> = physics_result.into_iter().collect();
-                ui.label(format!("{physics_result:#.2?}"));
-
-                ui.allocate_space((ui.available_width(), 0.0).into());
-            });
-
-            let physics_result = physics(&motor_conf.0, &motor_data.0, false);
+            let physics_result = reverse::axis_maximums(&motor_conf.0, &motor_data.0, 25.0, 0.01);
             let physics_result: BTreeMap<_, _> = physics_result.into_iter().collect();
             ui.label(format!("{physics_result:#.2?}"));
 
@@ -636,16 +630,24 @@ fn update_motor_conf(
             if motor_id.1 {
                 let transform = Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians()))
                     * Transform::from_translation(
-                        (motor.position * 2.0 + motor.orientation / 2.0).into(),
+                        (motor.position * 2.0 + motor.orientation / 2.0)
+                            .cast::<f32>()
+                            .into(),
                     )
-                    .looking_to(motor.orientation.into(), (-motor.position).into())
+                    .looking_to(
+                        motor.orientation.cast::<f32>().into(),
+                        (-motor.position).cast::<f32>().into(),
+                    )
                     * Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians()));
 
                 commands.entity(entity).insert(transform);
             } else {
                 let transform = Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians()))
-                    * Transform::from_translation((motor.position * 2.0).into())
-                        .looking_to(motor.orientation.into(), (-motor.position).into())
+                    * Transform::from_translation((motor.position * 2.0).cast::<f32>().into())
+                        .looking_to(
+                            motor.orientation.cast::<f32>().into(),
+                            (-motor.position).cast::<f32>().into(),
+                        )
                     * Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians()));
 
                 commands.entity(entity).insert(transform);
@@ -668,11 +670,13 @@ fn update_motor_conf(
                     .motor(&X3dMotorId::FrontRightTop)
                     .unwrap()
                     .orientation
-                    * heuristic::score(
-                        &physics(&motor_conf.0, &motor_data.0, true),
+                    * optimize::evaluate(
+                        &motor_conf.0,
                         &score_settings.0.flatten(),
+                        &motor_data.0,
                     )
                     * 0.3)
+                    .cast::<f32>()
                     .into(),
             );
         commands.entity(highlight_query.single()).insert(transform);
@@ -709,7 +713,7 @@ fn update_motor_conf(
 }
 
 fn add_motor_conf(
-    motor_conf: &MotorConfig<X3dMotorId>,
+    motor_conf: &MotorConfig<X3dMotorId, FloatType>,
     motor_data: &Res<MotorDataRes>,
 
     commands: &mut Commands,
@@ -720,7 +724,11 @@ fn add_motor_conf(
 ) {
     commands.spawn((
         PbrBundle {
-            mesh: meshes.add(shape::Box::new(WIDTH * 2.0, LENGTH * 2.0, HEIGHT * 2.0)),
+            mesh: meshes.add(shape::Box::new(
+                WIDTH as f32 * 2.0,
+                LENGTH as f32 * 2.0,
+                HEIGHT as f32 * 2.0,
+            )),
             material: materials_pbr.add(Color::rgb(0.8, 0.7, 0.6)),
             transform: Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians())),
             ..default()
@@ -836,7 +844,7 @@ fn set_camera_viewports(
 }
 
 fn make_strength_mesh(
-    motor_config: &MotorConfig<X3dMotorId>,
+    motor_config: &MotorConfig<X3dMotorId, FloatType>,
     motor_data: &MotorData,
     mesh_type: StrengthMesh,
     power_compensated: bool,
@@ -844,54 +852,49 @@ fn make_strength_mesh(
     let generated = IcoSphere::new(20, |point| {
         let movement = match mesh_type {
             StrengthMesh::Force => Movement {
-                force: point.normalize(),
-                torque: Vec3A::ZERO,
+                force: Vector3::from(point.normalize()).cast::<FloatType>(),
+                torque: vector![0.0, 0.0, 0.0],
             },
             StrengthMesh::Torque => Movement {
-                force: Vec3A::ZERO,
-                torque: point.normalize(),
+                force: vector![0.0, 0.0, 0.0],
+                torque: Vector3::from(point.normalize()).cast::<FloatType>(),
             },
         };
 
-        if power_compensated {
-            let forces = reverse::reverse_solve(movement, motor_config);
-            let motor_cmds = reverse::forces_to_cmds(forces, motor_config, motor_data);
-            let ratio = reverse::binary_search_force_ratio(
-                &motor_cmds,
-                motor_config,
-                motor_data,
-                25.0,
-                0.01,
-            );
+        // if power_compensated {
+        let forces = reverse::reverse_solve(movement, motor_config);
+        let motor_cmds = reverse::forces_to_cmds(forces, motor_config, motor_data);
+        let ratio =
+            reverse::binary_search_force_ratio(&motor_cmds, motor_config, motor_data, 25.0, 0.01);
 
-            let type_ratio = match mesh_type {
-                StrengthMesh::Force => 1.0,
-                StrengthMesh::Torque => 3.5,
-            };
-            let ratio = if ratio > 300.0 / type_ratio {
-                0.0
-            } else {
-                ratio
-            };
-
-            ratio * 0.015 * type_ratio
+        let type_ratio = match mesh_type {
+            StrengthMesh::Force => 1.0,
+            StrengthMesh::Torque => 3.5,
+        };
+        let ratio = if ratio > 300.0 / type_ratio {
+            0.0
         } else {
-            let mut forces = reverse::reverse_solve(movement, motor_config);
+            ratio
+        };
 
-            let type_ratio = match mesh_type {
-                StrengthMesh::Force => 1.0,
-                StrengthMesh::Torque => 3.5,
-            };
-
-            let force_length = forces.values().map(|it| it * it).sum::<f32>();
-            let adjustment = type_ratio * 0.458 / force_length.sqrt();
-            forces.values_mut().for_each(|it| *it *= adjustment);
-
-            let adjusted_movement = forward::forward_solve(motor_config, &forces);
-
-            adjusted_movement.force.dot(movement.force).abs()
-                + adjusted_movement.torque.dot(movement.torque).abs()
-        }
+        (ratio * 0.015 * type_ratio) as f32
+        // } else {
+        //     let mut forces = reverse::reverse_solve(movement, motor_config);
+        //
+        //     let type_ratio = match mesh_type {
+        //         StrengthMesh::Force => 1.0,
+        //         StrengthMesh::Torque => 3.5,
+        //     };
+        //
+        //     let force_length = forces.values().map(|it| it * it).sum::<f32>();
+        //     let adjustment = type_ratio * 0.458 / force_length.sqrt();
+        //     forces.values_mut().for_each(|it| *it *= adjustment);
+        //
+        //     let adjusted_movement = forward::forward_solve(motor_config, &forces);
+        //
+        //     adjusted_movement.force.dot(movement.force).abs()
+        //         + adjusted_movement.torque.dot(movement.torque).abs()
+        // }
     });
 
     iso_sphere_to_mesh(generated)
@@ -899,35 +902,33 @@ fn make_strength_mesh(
 
 fn make_heuristic_meshes(score_settings: &ScoreSettings, motor_data: &MotorData) -> (Mesh, Mesh) {
     let positive = IcoSphere::new(20, |point| {
-        let motor_config = MotorConfig::<X3dMotorId>::new(
+        let motor_config = MotorConfig::<X3dMotorId, FloatType>::new(
             Motor {
-                position: vec3a(WIDTH, LENGTH, HEIGHT) / 2.0,
-                orientation: point.normalize(),
+                position: vector![WIDTH, LENGTH, HEIGHT] / 2.0,
+                orientation: Vector3::from(point.normalize()).cast::<FloatType>(),
                 direction: Direction::Clockwise,
             },
-            vec3a(0.0, 0.0, 0.0),
+            vector![0.0, 0.0, 0.0],
         );
 
-        let physics = physics(&motor_config, motor_data, true);
-        let score = heuristic::score(&physics, score_settings);
+        let score = optimize::evaluate(&motor_config, score_settings, motor_data);
 
-        score.clamp(0.0, 10.0) * 0.3
+        score.clamp(0.0, 10.0) as f32 * 0.3
     });
 
     let negative = IcoSphere::new(20, |point| {
-        let motor_config = MotorConfig::<X3dMotorId>::new(
+        let motor_config = MotorConfig::<X3dMotorId, FloatType>::new(
             Motor {
-                position: vec3a(WIDTH, LENGTH, HEIGHT) / 2.0,
-                orientation: -point.normalize(),
+                position: vector![WIDTH, LENGTH, HEIGHT] / 2.0,
+                orientation: Vector3::from(point.normalize()).cast::<FloatType>(),
                 direction: Direction::Clockwise,
             },
-            vec3a(0.0, 0.0, 0.0),
+            vector![0.0, 0.0, 0.0],
         );
 
-        let physics = physics(&motor_config, motor_data, true);
-        let score = heuristic::score(&physics, score_settings);
+        let score = optimize::evaluate(&motor_config, score_settings, motor_data);
 
-        score.clamp(-10.0, 0.0).abs() * 0.3
+        score.clamp(-10.0, 0.0).abs() as f32 * 0.3
     });
 
     (iso_sphere_to_mesh(positive), iso_sphere_to_mesh(negative))
@@ -1011,7 +1012,8 @@ fn handle_heuristic_change(
             commands.entity(point).despawn();
         }
 
-        let sphere_points = fibonacci_sphere(100);
+        // let sphere_points = fibonacci_sphere(100);
+        let sphere_points = vec![vector![0.5, 0.3, -0.6].normalize()];
         for point in sphere_points {
             commands.spawn((
                 PbrBundle {
@@ -1043,47 +1045,40 @@ fn step_accent_points(
 ) {
     points.par_iter_mut().for_each(|(_, mut point)| {
         if !point.1 {
-            let (next_point, done) =
-                accent_sphere(0.005, point.0, &score_settings.0.flatten(), &motor_data.0);
-
-            let config = MotorConfig::<X3dMotorId>::new(
-                Motor {
-                    position: vec3a(WIDTH, LENGTH, HEIGHT) / 2.0,
-                    orientation: point.0.normalize(),
-                    direction: Direction::Clockwise,
-                },
-                vec3a(0.0, 0.0, 0.0),
-            );
-
-            let score = heuristic::score(
-                &physics(&config, &motor_data.0, true),
+            let result = gradient_ascent(
+                &point.0,
                 &score_settings.0.flatten(),
+                &motor_data.0,
+                STEP_SIZE,
             );
 
-            point.0 = next_point;
-            point.1 = done;
-            point.2 = score
+            point.0 = result.new_point;
+            point.1 =
+                result.gradient.norm_squared() < CRITICAL_POINT_EPSILON * CRITICAL_POINT_EPSILON;
+            point.2 = result.old_score as f32;
         }
     });
 
-    let mut best: Option<(MotorConfig<X3dMotorId>, f32)> = None;
+    let mut best: Option<(MotorConfig<X3dMotorId, FloatType>, f32)> = None;
 
     for (entity, point) in points.iter() {
         if !point.1 {
             let transform = Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians()))
-                * Transform::from_translation((point.0.normalize() * point.2 * 0.3).into());
+                * Transform::from_translation(
+                    Vec3::from(point.0.normalize().cast::<f32>()) * point.2 * 0.3,
+                );
 
             commands.entity(entity).try_insert(transform);
         }
 
         if Some(point.2) > best.as_ref().map(|it| it.1) {
-            let config = MotorConfig::<X3dMotorId>::new(
+            let config = MotorConfig::<X3dMotorId, FloatType>::new(
                 Motor {
-                    position: vec3a(WIDTH, LENGTH, HEIGHT) / 2.0,
+                    position: vector![WIDTH, LENGTH, HEIGHT] / 2.0,
                     orientation: point.0.normalize(),
                     direction: Direction::Clockwise,
                 },
-                vec3a(0.0, 0.0, 0.0),
+                vector![0.0, 0.0, 0.0],
             );
 
             best = Some((config, point.2));
@@ -1091,10 +1086,8 @@ fn step_accent_points(
     }
 
     if let Some((best, best_score)) = best {
-        let current_score = heuristic::score(
-            &physics(&motor_conf.0, &motor_data.0, true),
-            &score_settings.0.flatten(),
-        );
+        let current_score =
+            optimize::evaluate(&motor_conf.0, &score_settings.0.flatten(), &motor_data.0) as f32;
 
         if (best_score - current_score).abs() > 0.001 {
             commands.insert_resource(MotorConfigRes(best));
@@ -1104,29 +1097,29 @@ fn step_accent_points(
 
 #[derive(Clone)]
 pub struct ToggleableScoreSettings {
-    pub mes_linear: (bool, f32),
-    pub mes_x_off: (bool, f32),
-    pub mes_y_off: (bool, f32),
-    pub mes_z_off: (bool, f32),
+    pub mes_linear: (bool, f64),
+    pub mes_x_off: (bool, f64),
+    pub mes_y_off: (bool, f64),
+    pub mes_z_off: (bool, f64),
 
-    pub mes_torque: (bool, f32),
-    pub mes_x_rot_off: (bool, f32),
-    pub mes_y_rot_off: (bool, f32),
-    pub mes_z_rot_off: (bool, f32),
+    pub mes_torque: (bool, f64),
+    pub mes_x_rot_off: (bool, f64),
+    pub mes_y_rot_off: (bool, f64),
+    pub mes_z_rot_off: (bool, f64),
 
-    pub avg_linear: (bool, f32),
-    pub avg_torque: (bool, f32),
+    pub avg_linear: (bool, f64),
+    pub avg_torque: (bool, f64),
 
-    pub min_linear: (bool, f32),
-    pub min_torque: (bool, f32),
+    pub min_linear: (bool, f64),
+    pub min_torque: (bool, f64),
 
-    pub x: (bool, f32),
-    pub y: (bool, f32),
-    pub z: (bool, f32),
+    pub x: (bool, f64),
+    pub y: (bool, f64),
+    pub z: (bool, f64),
 
-    pub x_rot: (bool, f32),
-    pub y_rot: (bool, f32),
-    pub z_rot: (bool, f32),
+    pub x_rot: (bool, f64),
+    pub y_rot: (bool, f64),
+    pub z_rot: (bool, f64),
 }
 
 impl ToggleableScoreSettings {
@@ -1260,24 +1253,24 @@ fn auto_generate_constraints(
     match *auto_generate {
         AutoGenerate::Randomize => {
             score_settings.0 = ToggleableScoreSettings {
-                mes_linear: (rand::random(), rand::random::<f32>() - 0.5),
-                mes_x_off: (rand::random(), rand::random::<f32>() * 2.0 - 1.0),
-                mes_y_off: (rand::random(), rand::random::<f32>() * 2.0 - 1.0),
-                mes_z_off: (rand::random(), rand::random::<f32>() * 2.0 - 1.0),
-                mes_torque: (rand::random(), rand::random::<f32>() - 0.5),
-                mes_x_rot_off: (rand::random(), rand::random::<f32>() * 2.0 - 1.0),
-                mes_y_rot_off: (rand::random(), rand::random::<f32>() * 2.0 - 1.0),
-                mes_z_rot_off: (rand::random(), rand::random::<f32>() * 2.0 - 1.0),
-                avg_linear: (rand::random(), rand::random::<f32>() / 2.0 + 0.15),
+                mes_linear: (rand::random(), rand::random::<f64>() - 0.5),
+                mes_x_off: (rand::random(), rand::random::<f64>() * 2.0 - 1.0),
+                mes_y_off: (rand::random(), rand::random::<f64>() * 2.0 - 1.0),
+                mes_z_off: (rand::random(), rand::random::<f64>() * 2.0 - 1.0),
+                mes_torque: (rand::random(), rand::random::<f64>() - 0.5),
+                mes_x_rot_off: (rand::random(), rand::random::<f64>() * 2.0 - 1.0),
+                mes_y_rot_off: (rand::random(), rand::random::<f64>() * 2.0 - 1.0),
+                mes_z_rot_off: (rand::random(), rand::random::<f64>() * 2.0 - 1.0),
+                avg_linear: (rand::random(), rand::random::<f64>() / 2.0 + 0.15),
                 avg_torque: (rand::random(), rand::random()),
-                min_linear: (rand::random(), rand::random::<f32>() / 2.0 + 0.15),
+                min_linear: (rand::random(), rand::random::<f64>() / 2.0 + 0.15),
                 min_torque: (rand::random(), rand::random()),
-                x: (rand::random(), rand::random::<f32>() / 2.0 + 0.15),
-                y: (rand::random(), rand::random::<f32>() / 2.0 + 0.15),
-                z: (rand::random(), rand::random::<f32>() / 2.0 + 0.15),
-                x_rot: (rand::random(), rand::random::<f32>() / 2.0 + 0.25),
-                y_rot: (rand::random(), rand::random::<f32>() / 2.0 + 0.25),
-                z_rot: (rand::random(), rand::random::<f32>() / 2.0 + 0.25),
+                x: (rand::random(), rand::random::<f64>() / 2.0 + 0.15),
+                y: (rand::random(), rand::random::<f64>() / 2.0 + 0.15),
+                z: (rand::random(), rand::random::<f64>() / 2.0 + 0.15),
+                x_rot: (rand::random(), rand::random::<f64>() / 2.0 + 0.25),
+                y_rot: (rand::random(), rand::random::<f64>() / 2.0 + 0.25),
+                z_rot: (rand::random(), rand::random::<f64>() / 2.0 + 0.25),
             };
 
             *auto_generate = AutoGenerate::Solve(time.elapsed());
@@ -1338,4 +1331,70 @@ fn toggle_auto_gen_on_space(
             }
         }
     }
+}
+
+pub const STEP_SIZE: FloatType = 0.001;
+pub const DIMENSIONALITY: usize = 3;
+pub const CRITICAL_POINT_EPSILON: FloatType = 0.01;
+pub type Point<D> = SVector<D, DIMENSIONALITY>;
+
+pub fn initial_points(count: usize) -> Vec<Point<FloatType>> {
+    optimize::fibonacci_sphere(count)
+}
+
+pub fn motor_config<D: Number>(point: Point<D>) -> MotorConfig<X3dMotorId, D> {
+    MotorConfig::<X3dMotorId, _>::new(
+        Motor {
+            position: (vector![WIDTH, LENGTH, HEIGHT] / 2.0).map(D::from),
+            orientation: point,
+            direction: Direction::Clockwise,
+        },
+        vector![0.0, 0.0, 0.0].map(D::from),
+    )
+}
+
+pub fn normalise_point<D: Number>(point: Point<D>) -> Point<D> {
+    point.normalize()
+}
+
+fn gradient_ascent(
+    &old_point: &Point<FloatType>,
+    heuristic: &ScoreSettings,
+    motor_data: &MotorData,
+    step_size: FloatType,
+) -> Ascent {
+    let (score, grad) = gradient(
+        |point| {
+            let motor_config = motor_config(point);
+            optimize::evaluate(&motor_config, heuristic, motor_data)
+        },
+        old_point,
+    );
+
+    if grad.norm() > 70.0 {
+        println!("point: {old_point}, grad: {grad}");
+    }
+
+    let delta = step_size * grad;
+    let new_point = normalise_point(old_point + delta);
+    let delta = new_point - old_point;
+
+    Ascent {
+        old_point,
+        new_point,
+        old_score: score,
+        est_new_score: score + grad.dot(&delta),
+        gradient: grad,
+    }
+}
+
+#[derive(Debug)]
+struct Ascent {
+    old_point: Point<FloatType>,
+    new_point: Point<FloatType>,
+
+    old_score: FloatType,
+    est_new_score: FloatType,
+
+    gradient: Point<FloatType>,
 }

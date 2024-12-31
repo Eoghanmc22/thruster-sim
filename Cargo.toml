@@ -13,10 +13,9 @@ csv = "1"
 serde = { version = "1", features = ["derive"] }
 itertools = "0.13"
 time = { version = "0.3", features = ["local-offset"] }
-nalgebra = "0.33"
+nalgebra = { version = "0.33", features = ["convert-glam025"] }
 
-# bevy = { version = "0.12", default-features = false, features = ["animation", "bevy_asset", "bevy_gilrs", "bevy_scene", "bevy_winit", "bevy_core_pipeline", "bevy_pbr", "bevy_gltf", "bevy_render", "multi-threaded", "filesystem_watcher", "wayland", "webgl2", "tonemapping_luts", "ktx2", "zstd", "default_font", "dynamic_linking"] }
-bevy = { version = "0.14", default-features = false, features = [
+bevy = { version = "0.13", default-features = false, features = [
   "wayland",
   # "dynamic_linking",
   "animation",
@@ -31,6 +30,7 @@ bevy = { version = "0.14", default-features = false, features = [
   "bevy_sprite",
   "bevy_text",
   "bevy_ui",
+  "multi-threaded",
   "png",
   "hdr",
   "vorbis",
@@ -40,10 +40,10 @@ bevy = { version = "0.14", default-features = false, features = [
   "default_font",
   "webgl2",
 ] }
-bevy_panorbit_camera = "0.19"
-bevy_egui = "0.29"
+bevy_panorbit_camera = "0.17"
+bevy_egui = "0.26"
 
-hexasphere = "12"
+hexasphere = "10"
 
 rand = "0.8"
 
@@ -52,9 +52,8 @@ rand = "0.8"
 motor_math = { path = "../mate-rov-2025/motor_math", features = [
   "double_precision",
 ] }
+stable_hashmap = { path = "../mate-rov-2025/stable_hashmap" }
 
-
-stable_hashmap = { git = "https://github.com/Eoghanmc22/mate-rov-2025.git" }
 [profile.release]
 debug = true
 
@@ -67,6 +66,6 @@ debug = false
 [profile.web]
 inherits = "release"
 lto = true
-codegen-units = 1
+codegen-units = 1    # bevy = { version = "0.12", default-features = false, features = ["animation", "bevy_asset", "bevy_gilrs", "bevy_scene", "bevy_winit", "bevy_core_pipeline", "bevy_pbr", "bevy_gltf", "bevy_render", "multi-threaded", "filesystem_watcher", "wayland", "webgl2", "tonemapping_luts", "ktx2", "zstd", "default_font", "dynamic_linking"] }
 opt-level = 's'
 debug = false

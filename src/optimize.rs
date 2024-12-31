@@ -28,6 +28,6 @@ pub fn evaluate<MotorId: Debug + Ord + Hash + Clone, D: Number>(
     settings: &ScoreSettings,
     motor_data: &MotorData,
 ) -> D {
-    let result = reverse::axis_maximums(motor_config, motor_data, 1.0, 0.05);
+    let result = reverse::axis_maximums(motor_config, motor_data, 0.5, 0.01);
     score(&result, settings)
 }
