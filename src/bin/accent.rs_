@@ -1,19 +1,20 @@
 use std::collections::BTreeMap;
 
+use bevy::log::warn;
 use itertools::Itertools;
 use motor_math::{motor_preformance, x3d::X3dMotorId, Direction, FloatType, Motor, MotorConfig};
 use nalgebra::{vector, Vector3};
 use thruster_sim::{
     heuristic::score,
-    optimize::{accent_sphere, fibonacci_sphere},
-    physics, HEIGHT, LENGTH, WIDTH,
+    optimize::{self, fibonacci_sphere},
+    HEIGHT, LENGTH, WIDTH,
 };
 
 // For fast physics
 // const STEP: f32 = 0.385;
 // For slow physics
 // const STEP: f32 = 0.01;
-const STEP: FloatType = 0.001;
+const STEP: FloatType = 0.01;
 const SIMILARITY: FloatType = 0.05;
 
 fn main() {
@@ -26,11 +27,14 @@ fn main() {
 
     while !points.is_empty() {
         points.retain_mut(|point| {
+            println!("{point}");
             let (new_point, solved) = accent_sphere(STEP, *point, &Default::default(), &motor_data);
 
             if solved {
                 if !new_point.norm_squared().is_nan() {
                     solved_points.push(new_point);
+                } else {
+                    warn!("Dropped Point");
                 }
                 false
             } else {
@@ -51,20 +55,17 @@ fn main() {
         .map(|point| {
             (
                 point,
-                score(
-                    &physics(
-                        &MotorConfig::<X3dMotorId, FloatType>::new(
-                            Motor {
-                                orientation: point,
-                                position: vector![WIDTH / 2.0, LENGTH / 2.0, HEIGHT / 2.0],
-                                direction: Direction::Clockwise,
-                            },
-                            vector![0.0, 0.0, 0.0],
-                        ),
-                        &motor_data,
-                        true,
+                optimize::evaluate(
+                    &MotorConfig::<X3dMotorId, FloatType>::new(
+                        Motor {
+                            orientation: point,
+                            position: vector![WIDTH / 2.0, LENGTH / 2.0, HEIGHT / 2.0],
+                            direction: Direction::Clockwise,
+                        },
+                        vector![0.0, 0.0, 0.0],
                     ),
                     &Default::default(),
+                    &motor_data,
                 ),
             )
         })
