@@ -1,4 +1,3 @@
-use std::fmt::Write;
 use std::{collections::BTreeMap, time::Duration};
 
 use bevy::color;
@@ -60,21 +59,19 @@ fn main() {
         .insert_resource(ScoreSettingsRes(ToggleableScoreSettings::default()))
         .insert_resource(MotorDataRes(motor_data))
         .insert_resource(ClearColor(Color::WHITE))
-        .insert_resource(PowerCompensated(true))
         .insert_resource(AutoGenerate::Off)
         .add_systems(Startup, setup)
         .add_systems(
             Update,
             (
                 render_gui,
-                // update_motor_conf,
+                update_motor_conf,
                 set_camera_viewports,
                 sync_cameras,
                 handle_heuristic_change,
                 step_accent_points,
                 screenshot_on_tab,
                 auto_generate_constraints.before(sync_cameras),
-                toggle_power_compensated_on_enter,
                 toggle_auto_gen_on_space,
             ),
         )
@@ -90,8 +87,6 @@ struct AxisGizmo;
 struct MotorConfigRes(MotorConfig<X3dMotorId, FloatType>);
 #[derive(Resource)]
 pub struct MotorDataRes(pub MotorData);
-#[derive(Resource)]
-pub struct PowerCompensated(pub bool);
 #[derive(Resource)]
 pub enum AutoGenerate {
     Off,
@@ -166,7 +161,6 @@ fn setup(
     motor_data: Res<MotorDataRes>,
     mut materials_pbr: ResMut<Assets<StandardMaterial>>,
     score_settings: Res<ScoreSettingsRes>,
-    power_compensated: Res<PowerCompensated>,
 ) {
     let motor_conf = MotorConfig::<X3dMotorId, FloatType>::new(
         Motor {
@@ -183,7 +177,6 @@ fn setup(
         &mut commands,
         &mut meshes,
         &mut materials_pbr,
-        power_compensated.0,
     );
     commands.insert_resource(MotorConfigRes(motor_conf.clone()));
 
@@ -572,7 +565,7 @@ fn render_gui(
         });
 
         ui.collapsing("Physics Result", |ui| {
-            let physics_result = reverse::axis_maximums(&motor_conf.0, &motor_data.0, 25.0, 0.01);
+            let physics_result = reverse::axis_maximums(&motor_conf.0, &motor_data.0, 25.0, 0.001);
             let physics_result: BTreeMap<_, _> = physics_result.into_iter().collect();
             ui.label(format!("{physics_result:#.2?}"));
 
@@ -613,15 +606,13 @@ fn update_motor_conf(
     motor_conf: Res<MotorConfigRes>,
     motor_data: Res<MotorDataRes>,
     score_settings: Res<ScoreSettingsRes>,
-    power_compensated: Res<PowerCompensated>,
     motors_query: Query<(Entity, &MotorMarker)>,
     mut meshes: ResMut<Assets<Mesh>>,
     mesh_query: Query<(&Handle<Mesh>, &StrengthMesh)>,
     highlight_query: Query<Entity, With<CurrentConfig>>,
     mut gizmos_axis: Gizmos<AxisGizmo>,
-    mut gizmos_thrust: Gizmos<ThrustGizmo>,
 ) {
-    if motor_conf.is_changed() || power_compensated.is_changed() {
+    if motor_conf.is_changed() {
         for (entity, motor_id) in motors_query.iter() {
             let motor = motor_conf.0.motor(&motor_id.0).unwrap();
 
@@ -653,12 +644,8 @@ fn update_motor_conf(
         }
 
         for (mesh, mesh_type) in mesh_query.iter() {
-            *meshes.get_mut(mesh).unwrap() = make_strength_mesh(
-                &motor_conf.0,
-                &motor_data.0,
-                *mesh_type,
-                power_compensated.0,
-            );
+            *meshes.get_mut(mesh).unwrap() =
+                make_strength_mesh(&motor_conf.0, &motor_data.0, *mesh_type);
         }
 
         let transform = Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians()))
@@ -729,8 +716,6 @@ fn add_motor_conf(
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
     materials_pbr: &mut ResMut<Assets<StandardMaterial>>,
-
-    power_compensated: bool,
 ) {
     commands.spawn((
         PbrBundle {
@@ -748,14 +733,7 @@ fn add_motor_conf(
 
     commands.spawn((
         PbrBundle {
-            mesh: meshes.add(
-                Sphere::new(0.05), // shape::Icosphere {
-                                   //     radius: 0.05,
-                                   //     subdivisions: 20,
-                                   // }
-                                   // .try_into()
-                                   // .unwrap(),
-            ),
+            mesh: meshes.add(Sphere::new(0.05)),
             material: materials_pbr.add(Color::from(color::palettes::css::GRAY)),
             ..default()
         },
@@ -769,7 +747,6 @@ fn add_motor_conf(
                 motor_conf,
                 &motor_data.0,
                 StrengthMesh::Force,
-                power_compensated,
             )),
             material: materials_pbr.add(Color::srgb(0.8, 0.7, 0.6)),
             transform: Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians())),
@@ -785,7 +762,6 @@ fn add_motor_conf(
                 motor_conf,
                 &motor_data.0,
                 StrengthMesh::Torque,
-                power_compensated,
             )),
             material: materials_pbr.add(Color::srgb(0.8, 0.7, 0.6)),
             transform: Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians())),
@@ -855,9 +831,8 @@ fn make_strength_mesh(
     motor_config: &MotorConfig<X3dMotorId, FloatType>,
     motor_data: &MotorData,
     mesh_type: StrengthMesh,
-    power_compensated: bool,
 ) -> Mesh {
-    let generated = IcoSphere::new(20, |point| {
+    let generated = IcoSphere::new(5, |point| {
         let movement = match mesh_type {
             StrengthMesh::Force => Movement {
                 force: Vector3::from(point.normalize()).cast::<FloatType>(),
@@ -869,11 +844,10 @@ fn make_strength_mesh(
             },
         };
 
-        // if power_compensated {
         let forces = reverse::reverse_solve(movement, motor_config);
         let motor_cmds = reverse::forces_to_cmds(forces, motor_config, motor_data);
         let ratio =
-            reverse::binary_search_force_ratio(&motor_cmds, motor_config, motor_data, 25.0, 0.01);
+            reverse::binary_search_force_ratio(&motor_cmds, motor_config, motor_data, 25.0, 0.001);
 
         let type_ratio = match mesh_type {
             StrengthMesh::Force => 1.0,
@@ -886,23 +860,6 @@ fn make_strength_mesh(
         };
 
         (ratio * 0.015 * type_ratio) as f32
-        // } else {
-        //     let mut forces = reverse::reverse_solve(movement, motor_config);
-        //
-        //     let type_ratio = match mesh_type {
-        //         StrengthMesh::Force => 1.0,
-        //         StrengthMesh::Torque => 3.5,
-        //     };
-        //
-        //     let force_length = forces.values().map(|it| it * it).sum::<f32>();
-        //     let adjustment = type_ratio * 0.458 / force_length.sqrt();
-        //     forces.values_mut().for_each(|it| *it *= adjustment);
-        //
-        //     let adjusted_movement = forward::forward_solve(motor_config, &forces);
-        //
-        //     adjusted_movement.force.dot(movement.force).abs()
-        //         + adjusted_movement.torque.dot(movement.torque).abs()
-        // }
     });
 
     iso_sphere_to_mesh(generated)
@@ -967,6 +924,7 @@ fn iso_sphere_to_mesh(obj: IcoSphere<f32>) -> Mesh {
     mesh.insert_indices(indices);
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, points);
     // mesh.duplicate_vertices();
+    // mesh.compute_flat_normals();
     mesh.compute_smooth_normals();
     mesh
 }
@@ -1025,15 +983,7 @@ fn handle_heuristic_change(
         for point in sphere_points {
             commands.spawn((
                 PbrBundle {
-                    mesh: meshes.add(
-                        Sphere::new(0.01),
-                        // shape::Icosphere {
-                        //     radius: 0.01,
-                        //     subdivisions: 1,
-                        // }
-                        // .try_into()
-                        // .unwrap(),
-                    ),
+                    mesh: meshes.add(Sphere::new(0.01)),
                     material: materials_pbr.add(Color::WHITE),
                     ..default()
                 },
@@ -1064,8 +1014,6 @@ fn step_accent_points(
             point.1 =
                 result.gradient.norm_squared() < CRITICAL_POINT_EPSILON * CRITICAL_POINT_EPSILON;
             point.2 = result.old_score as f32;
-
-            println!("{}", result.gradient);
         }
     });
 
@@ -1107,29 +1055,29 @@ fn step_accent_points(
 
 #[derive(Clone)]
 pub struct ToggleableScoreSettings {
-    pub mes_linear: (bool, f64),
-    pub mes_x_off: (bool, f64),
-    pub mes_y_off: (bool, f64),
-    pub mes_z_off: (bool, f64),
+    pub mes_linear: (bool, FloatType),
+    pub mes_x_off: (bool, FloatType),
+    pub mes_y_off: (bool, FloatType),
+    pub mes_z_off: (bool, FloatType),
 
-    pub mes_torque: (bool, f64),
-    pub mes_x_rot_off: (bool, f64),
-    pub mes_y_rot_off: (bool, f64),
-    pub mes_z_rot_off: (bool, f64),
+    pub mes_torque: (bool, FloatType),
+    pub mes_x_rot_off: (bool, FloatType),
+    pub mes_y_rot_off: (bool, FloatType),
+    pub mes_z_rot_off: (bool, FloatType),
 
-    pub avg_linear: (bool, f64),
-    pub avg_torque: (bool, f64),
+    pub avg_linear: (bool, FloatType),
+    pub avg_torque: (bool, FloatType),
 
-    pub min_linear: (bool, f64),
-    pub min_torque: (bool, f64),
+    pub min_linear: (bool, FloatType),
+    pub min_torque: (bool, FloatType),
 
-    pub x: (bool, f64),
-    pub y: (bool, f64),
-    pub z: (bool, f64),
+    pub x: (bool, FloatType),
+    pub y: (bool, FloatType),
+    pub z: (bool, FloatType),
 
-    pub x_rot: (bool, f64),
-    pub y_rot: (bool, f64),
-    pub z_rot: (bool, f64),
+    pub x_rot: (bool, FloatType),
+    pub y_rot: (bool, FloatType),
+    pub z_rot: (bool, FloatType),
 }
 
 impl ToggleableScoreSettings {
@@ -1263,24 +1211,24 @@ fn auto_generate_constraints(
     match *auto_generate {
         AutoGenerate::Randomize => {
             score_settings.0 = ToggleableScoreSettings {
-                mes_linear: (rand::random(), rand::random::<f64>() - 0.5),
-                mes_x_off: (rand::random(), rand::random::<f64>() * 2.0 - 1.0),
-                mes_y_off: (rand::random(), rand::random::<f64>() * 2.0 - 1.0),
-                mes_z_off: (rand::random(), rand::random::<f64>() * 2.0 - 1.0),
-                mes_torque: (rand::random(), rand::random::<f64>() - 0.5),
-                mes_x_rot_off: (rand::random(), rand::random::<f64>() * 2.0 - 1.0),
-                mes_y_rot_off: (rand::random(), rand::random::<f64>() * 2.0 - 1.0),
-                mes_z_rot_off: (rand::random(), rand::random::<f64>() * 2.0 - 1.0),
-                avg_linear: (rand::random(), rand::random::<f64>() / 2.0 + 0.15),
+                mes_linear: (rand::random(), rand::random::<FloatType>() - 0.5),
+                mes_x_off: (rand::random(), rand::random::<FloatType>() * 2.0 - 1.0),
+                mes_y_off: (rand::random(), rand::random::<FloatType>() * 2.0 - 1.0),
+                mes_z_off: (rand::random(), rand::random::<FloatType>() * 2.0 - 1.0),
+                mes_torque: (rand::random(), rand::random::<FloatType>() - 0.5),
+                mes_x_rot_off: (rand::random(), rand::random::<FloatType>() * 2.0 - 1.0),
+                mes_y_rot_off: (rand::random(), rand::random::<FloatType>() * 2.0 - 1.0),
+                mes_z_rot_off: (rand::random(), rand::random::<FloatType>() * 2.0 - 1.0),
+                avg_linear: (rand::random(), rand::random::<FloatType>() / 2.0 + 0.15),
                 avg_torque: (rand::random(), rand::random()),
-                min_linear: (rand::random(), rand::random::<f64>() / 2.0 + 0.15),
+                min_linear: (rand::random(), rand::random::<FloatType>() / 2.0 + 0.15),
                 min_torque: (rand::random(), rand::random()),
-                x: (rand::random(), rand::random::<f64>() / 2.0 + 0.15),
-                y: (rand::random(), rand::random::<f64>() / 2.0 + 0.15),
-                z: (rand::random(), rand::random::<f64>() / 2.0 + 0.15),
-                x_rot: (rand::random(), rand::random::<f64>() / 2.0 + 0.25),
-                y_rot: (rand::random(), rand::random::<f64>() / 2.0 + 0.25),
-                z_rot: (rand::random(), rand::random::<f64>() / 2.0 + 0.25),
+                x: (rand::random(), rand::random::<FloatType>() / 2.0 + 0.15),
+                y: (rand::random(), rand::random::<FloatType>() / 2.0 + 0.15),
+                z: (rand::random(), rand::random::<FloatType>() / 2.0 + 0.15),
+                x_rot: (rand::random(), rand::random::<FloatType>() / 2.0 + 0.25),
+                y_rot: (rand::random(), rand::random::<FloatType>() / 2.0 + 0.25),
+                z_rot: (rand::random(), rand::random::<FloatType>() / 2.0 + 0.25),
             };
 
             *auto_generate = AutoGenerate::Solve(time.elapsed());
@@ -1318,15 +1266,6 @@ fn auto_generate_constraints(
     }
 }
 
-fn toggle_power_compensated_on_enter(
-    mut power_compensated: ResMut<PowerCompensated>,
-    input: Res<ButtonInput<KeyCode>>,
-) {
-    if input.just_pressed(KeyCode::Enter) {
-        power_compensated.0 = !power_compensated.0;
-    }
-}
-
 fn toggle_auto_gen_on_space(
     mut auto_generate: ResMut<AutoGenerate>,
     input: Res<ButtonInput<KeyCode>>,
@@ -1343,9 +1282,9 @@ fn toggle_auto_gen_on_space(
     }
 }
 
-pub const STEP_SIZE: FloatType = 0.01;
+pub const STEP_SIZE: FloatType = 0.005;
 pub const DIMENSIONALITY: usize = 3;
-pub const CRITICAL_POINT_EPSILON: FloatType = 0.001;
+pub const CRITICAL_POINT_EPSILON: FloatType = 0.01;
 pub type Point<D> = SVector<D, DIMENSIONALITY>;
 
 pub fn initial_points(count: usize) -> Vec<Point<FloatType>> {
@@ -1380,32 +1319,6 @@ fn gradient_ascent(
         },
         old_point,
     );
-
-    if grad.norm() > 70.0 {
-        let mut buf = String::new();
-        writeln!(buf, "----------");
-        let (score, grad) = gradient(
-            |point| {
-                let motor_config = motor_config(point);
-                writeln!(
-                    buf,
-                    "point: {old_point}, grad: {grad}, matrix: {}, svd: {:#?}, psuedo: {}",
-                    motor_config.matrix, motor_config.svd, motor_config.pseudo_inverse
-                );
-                optimize::evaluate(&motor_config, heuristic, motor_data)
-            },
-            old_point,
-        );
-        let motor_config = motor_config(old_point);
-        writeln!(
-            buf,
-            "matrix: {}, svd: {:#?}, psuedo: {}",
-            motor_config.matrix, motor_config.svd, motor_config.pseudo_inverse
-        );
-        writeln!(buf, "----------");
-
-        print!("{buf}");
-    }
 
     let delta = step_size * grad;
     let new_point = normalise_point(old_point + delta);
