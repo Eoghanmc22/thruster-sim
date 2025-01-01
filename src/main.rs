@@ -70,7 +70,7 @@ fn main() {
                 sync_cameras,
                 handle_heuristic_change,
                 step_accent_points,
-                screenshot_on_tab,
+                // screenshot_on_tab,
                 auto_generate_constraints.before(sync_cameras),
                 toggle_auto_gen_on_space,
             ),
@@ -1003,12 +1003,7 @@ fn step_accent_points(
 ) {
     points.par_iter_mut().for_each(|(_, mut point)| {
         if !point.1 {
-            let result = gradient_ascent(
-                &point.0,
-                &score_settings.0.flatten(),
-                &motor_data.0,
-                STEP_SIZE,
-            );
+            let result = gradient_ascent(&point.0, &score_settings.0.flatten(), &motor_data.0);
 
             point.0 = result.new_point;
             point.1 =
@@ -1047,7 +1042,7 @@ fn step_accent_points(
         let current_score =
             optimize::evaluate(&motor_conf.0, &score_settings.0.flatten(), &motor_data.0) as f32;
 
-        if (best_score - current_score).abs() > 0.001 {
+        if best_score - current_score > 0.002 {
             commands.insert_resource(MotorConfigRes(best));
         }
     }
@@ -1282,9 +1277,10 @@ fn toggle_auto_gen_on_space(
     }
 }
 
-pub const STEP_SIZE: FloatType = 0.005;
+pub const STEP_SIZE: FloatType = 0.002;
+pub const MAX_STEP_SIZE: FloatType = 0.005;
 pub const DIMENSIONALITY: usize = 3;
-pub const CRITICAL_POINT_EPSILON: FloatType = 0.01;
+pub const CRITICAL_POINT_EPSILON: FloatType = 0.05;
 pub type Point<D> = SVector<D, DIMENSIONALITY>;
 
 pub fn initial_points(count: usize) -> Vec<Point<FloatType>> {
@@ -1310,7 +1306,6 @@ fn gradient_ascent(
     &old_point: &Point<FloatType>,
     heuristic: &ScoreSettings,
     motor_data: &MotorData,
-    step_size: FloatType,
 ) -> Ascent {
     let (score, grad) = gradient(
         |point| {
@@ -1320,7 +1315,12 @@ fn gradient_ascent(
         old_point,
     );
 
-    let delta = step_size * grad;
+    let mut delta = STEP_SIZE * grad;
+    let norm = delta.norm();
+    if norm > MAX_STEP_SIZE {
+        delta.unscale_mut(norm / MAX_STEP_SIZE);
+    }
+
     let new_point = normalise_point(old_point + delta);
     let delta = new_point - old_point;
 
