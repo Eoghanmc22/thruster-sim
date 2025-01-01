@@ -1,12 +1,14 @@
+use std::fmt::Write;
 use std::{collections::BTreeMap, time::Duration};
 
+use bevy::color;
 use bevy::{
     diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
-    math::{vec3, vec3a, Vec3A},
+    math::vec3,
     prelude::*,
     render::{
-        camera::{self, ScalingMode, Viewport},
-        mesh::{shape::Cylinder, Indices},
+        camera::{ScalingMode, Viewport},
+        mesh::Indices,
         render_asset::RenderAssetUsages,
         render_resource::PrimitiveTopology,
         view::{screenshot::ScreenshotManager, RenderLayers},
@@ -21,17 +23,13 @@ use bevy_panorbit_camera::{PanOrbitCamera, PanOrbitCameraPlugin};
 use hexasphere::shapes::IcoSphere;
 use motor_math::{
     motor_preformance::{self, MotorData},
-    solve::{forward, reverse},
+    solve::reverse,
     x3d::X3dMotorId,
     Direction, FloatType, Motor, MotorConfig, Movement, Number,
 };
 use nalgebra::{vector, SVector, Vector3};
 use num_dual::gradient;
-use thruster_sim::{
-    heuristic::{self, ScoreSettings},
-    optimize::{self, fibonacci_sphere},
-    HEIGHT, LENGTH, WIDTH,
-};
+use thruster_sim::{heuristic::ScoreSettings, optimize, HEIGHT, LENGTH, WIDTH};
 
 fn main() {
     let motor_data = motor_preformance::read_motor_data("motor_data.csv").expect("Read motor data");
@@ -51,10 +49,10 @@ fn main() {
             LogDiagnosticsPlugin::default(),
             FrameTimeDiagnosticsPlugin,
         ))
-        .insert_gizmo_group(
+        .insert_gizmo_config(
             AxisGizmo,
             GizmoConfig {
-                render_layers: RenderLayers::all(),
+                render_layers: RenderLayers::from_layers(&[0, 1, 2, 3]),
                 ..default()
             },
         )
@@ -69,7 +67,7 @@ fn main() {
             Update,
             (
                 render_gui,
-                update_motor_conf,
+                // update_motor_conf,
                 set_camera_viewports,
                 sync_cameras,
                 handle_heuristic_change,
@@ -201,7 +199,7 @@ fn setup(
             transform: Transform::from_xyz(4.0, 8.0, 4.0),
             ..default()
         },
-        RenderLayers::all(),
+        RenderLayers::from_layers(&[0, 1, 2, 3]),
     ));
 
     // camera
@@ -281,7 +279,7 @@ fn setup(
     commands.spawn((
         PbrBundle {
             mesh: meshes.add(positive),
-            material: materials_pbr.add(Color::rgb(0.4, 0.8, 0.3)),
+            material: materials_pbr.add(Color::srgb(0.4, 0.8, 0.3)),
             transform: Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians())),
             ..default()
         },
@@ -292,7 +290,7 @@ fn setup(
     commands.spawn((
         PbrBundle {
             mesh: meshes.add(negative),
-            material: materials_pbr.add(Color::rgb(0.8, 0.4, 0.3)),
+            material: materials_pbr.add(Color::srgb(0.8, 0.4, 0.3)),
             transform: Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians())),
             ..default()
         },
@@ -605,7 +603,7 @@ fn render_gui(
         true
     };
 
-    cameras.for_each_mut(|mut camera| {
+    cameras.iter_mut().for_each(|mut camera| {
         camera.enabled = enable_cameras;
     })
 }
@@ -635,8 +633,8 @@ fn update_motor_conf(
                             .into(),
                     )
                     .looking_to(
-                        motor.orientation.cast::<f32>().into(),
-                        (-motor.position).cast::<f32>().into(),
+                        Vec3::from(motor.orientation.cast::<f32>()),
+                        Vec3::from((-motor.position).cast::<f32>()),
                     )
                     * Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians()));
 
@@ -645,8 +643,8 @@ fn update_motor_conf(
                 let transform = Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians()))
                     * Transform::from_translation((motor.position * 2.0).cast::<f32>().into())
                         .looking_to(
-                            motor.orientation.cast::<f32>().into(),
-                            (-motor.position).cast::<f32>().into(),
+                            Vec3::from(motor.orientation.cast::<f32>()),
+                            Vec3::from((-motor.position).cast::<f32>()),
                         )
                     * Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians()));
 
@@ -686,7 +684,7 @@ fn update_motor_conf(
         Vec3::ZERO,
         Quat::from_rotation_x(90f32.to_radians()),
         Vec2::splat(5.0),
-        Color::GRAY,
+        color::palettes::css::GRAY,
     );
 
     for i in 1..=9 {
@@ -695,7 +693,11 @@ fn update_motor_conf(
         gizmos_axis.line(
             vec3(-2.5, 0.0, y),
             vec3(2.5, 0.0, y),
-            if y != 0.0 { Color::GRAY } else { Color::RED },
+            if y != 0.0 {
+                color::palettes::css::GRAY
+            } else {
+                color::palettes::css::RED
+            },
         );
     }
 
@@ -705,11 +707,19 @@ fn update_motor_conf(
         gizmos_axis.line(
             vec3(x, 0.0, -2.5),
             vec3(x, 0.0, 2.5),
-            if x != 0.0 { Color::GRAY } else { Color::GREEN },
+            if x != 0.0 {
+                color::palettes::css::GRAY
+            } else {
+                color::palettes::css::GREEN
+            },
         );
     }
 
-    gizmos_axis.line(vec3(0.0, -2.5, 0.0), vec3(0.0, 2.5, 0.0), Color::BLUE);
+    gizmos_axis.line(
+        vec3(0.0, -2.5, 0.0),
+        vec3(0.0, 2.5, 0.0),
+        color::palettes::css::BLUE,
+    );
 }
 
 fn add_motor_conf(
@@ -724,12 +734,12 @@ fn add_motor_conf(
 ) {
     commands.spawn((
         PbrBundle {
-            mesh: meshes.add(shape::Box::new(
+            mesh: meshes.add(Cuboid::new(
                 WIDTH as f32 * 2.0,
                 LENGTH as f32 * 2.0,
                 HEIGHT as f32 * 2.0,
             )),
-            material: materials_pbr.add(Color::rgb(0.8, 0.7, 0.6)),
+            material: materials_pbr.add(Color::srgb(0.8, 0.7, 0.6)),
             transform: Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians())),
             ..default()
         },
@@ -746,7 +756,7 @@ fn add_motor_conf(
                                    // .try_into()
                                    // .unwrap(),
             ),
-            material: materials_pbr.add(Color::GRAY),
+            material: materials_pbr.add(Color::from(color::palettes::css::GRAY)),
             ..default()
         },
         CurrentConfig,
@@ -761,7 +771,7 @@ fn add_motor_conf(
                 StrengthMesh::Force,
                 power_compensated,
             )),
-            material: materials_pbr.add(Color::rgb(0.8, 0.7, 0.6)),
+            material: materials_pbr.add(Color::srgb(0.8, 0.7, 0.6)),
             transform: Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians())),
             ..default()
         },
@@ -777,7 +787,7 @@ fn add_motor_conf(
                 StrengthMesh::Torque,
                 power_compensated,
             )),
-            material: materials_pbr.add(Color::rgb(0.8, 0.7, 0.6)),
+            material: materials_pbr.add(Color::srgb(0.8, 0.7, 0.6)),
             transform: Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians())),
             ..default()
         },
@@ -801,10 +811,9 @@ fn add_motor(
         PbrBundle {
             mesh: meshes.add(Cylinder {
                 radius: 0.005,
-                height: 1.0,
-                ..default()
+                half_height: 1.0 / 2.0,
             }),
-            material: materials_pbr.add(Color::GREEN),
+            material: materials_pbr.add(Color::from(color::palettes::css::GREEN)),
             ..default()
         },
         MotorMarker(motor_id, true),
@@ -815,10 +824,9 @@ fn add_motor(
         PbrBundle {
             mesh: meshes.add(Cylinder {
                 radius: 0.15,
-                height: 0.15,
-                ..default()
+                half_height: 0.15 / 2.0,
             }),
-            material: materials_pbr.add(Color::DARK_GRAY),
+            material: materials_pbr.add(Color::from(color::palettes::css::DARK_GRAY)),
             ..default()
         },
         MotorMarker(motor_id, false),
@@ -958,8 +966,8 @@ fn iso_sphere_to_mesh(obj: IcoSphere<f32>) -> Mesh {
     );
     mesh.insert_indices(indices);
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, points);
-    mesh.duplicate_vertices();
-    mesh.compute_flat_normals();
+    // mesh.duplicate_vertices();
+    mesh.compute_smooth_normals();
     mesh
 }
 
@@ -1012,8 +1020,8 @@ fn handle_heuristic_change(
             commands.entity(point).despawn();
         }
 
-        // let sphere_points = fibonacci_sphere(100);
-        let sphere_points = vec![vector![0.5, 0.3, -0.6].normalize()];
+        let sphere_points = initial_points(100);
+        // let sphere_points = vec![vector![0.5, 0.3, -0.6].normalize()];
         for point in sphere_points {
             commands.spawn((
                 PbrBundle {
@@ -1056,6 +1064,8 @@ fn step_accent_points(
             point.1 =
                 result.gradient.norm_squared() < CRITICAL_POINT_EPSILON * CRITICAL_POINT_EPSILON;
             point.2 = result.old_score as f32;
+
+            println!("{}", result.gradient);
         }
     });
 
@@ -1333,9 +1343,9 @@ fn toggle_auto_gen_on_space(
     }
 }
 
-pub const STEP_SIZE: FloatType = 0.001;
+pub const STEP_SIZE: FloatType = 0.01;
 pub const DIMENSIONALITY: usize = 3;
-pub const CRITICAL_POINT_EPSILON: FloatType = 0.01;
+pub const CRITICAL_POINT_EPSILON: FloatType = 0.001;
 pub type Point<D> = SVector<D, DIMENSIONALITY>;
 
 pub fn initial_points(count: usize) -> Vec<Point<FloatType>> {
@@ -1372,7 +1382,29 @@ fn gradient_ascent(
     );
 
     if grad.norm() > 70.0 {
-        println!("point: {old_point}, grad: {grad}");
+        let mut buf = String::new();
+        writeln!(buf, "----------");
+        let (score, grad) = gradient(
+            |point| {
+                let motor_config = motor_config(point);
+                writeln!(
+                    buf,
+                    "point: {old_point}, grad: {grad}, matrix: {}, svd: {:#?}, psuedo: {}",
+                    motor_config.matrix, motor_config.svd, motor_config.pseudo_inverse
+                );
+                optimize::evaluate(&motor_config, heuristic, motor_data)
+            },
+            old_point,
+        );
+        let motor_config = motor_config(old_point);
+        writeln!(
+            buf,
+            "matrix: {}, svd: {:#?}, psuedo: {}",
+            motor_config.matrix, motor_config.svd, motor_config.pseudo_inverse
+        );
+        writeln!(buf, "----------");
+
+        print!("{buf}");
     }
 
     let delta = step_size * grad;
