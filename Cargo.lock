@@ -2745,7 +2745,7 @@ dependencies = [
  "num-dual",
  "num_enum",
  "serde",
- "stable_hashmap 0.1.0 (git+https://github.com/Eoghanmc22/mate-rov-2025.git)",
+ "stable_hashmap",
  "tracing",
 ]
 
@@ -3895,13 +3895,6 @@ checksum = "a8f112729512f8e442d81f95a8a7ddf2b7c6b8a1a6f509a95864142b30cab2d3"
 [[package]]
 name = "stable_hashmap"
 version = "0.1.0"
-dependencies = [
- "ahash",
-]
-
-[[package]]
-name = "stable_hashmap"
-version = "0.1.0"
 source = "git+https://github.com/Eoghanmc22/mate-rov-2025.git#ddc0cd42d149d8deee878f3bd067c21c4f6a64c1"
 dependencies = [
  "ahash",
@@ -4026,7 +4019,7 @@ dependencies = [
  "num-dual",
  "rand",
  "serde",
- "stable_hashmap 0.1.0",
+ "stable_hashmap",
  "time",
 ]
 

@@ -54,7 +54,8 @@ motor_math = { git = "https://github.com/Eoghanmc22/mate-rov-2025.git", features
 # motor_math = { path = "../mate-rov-2025/motor_math", features = [
 #   "double_precision",
 # ] }
-stable_hashmap = { path = "../mate-rov-2025/stable_hashmap" }
+stable_hashmap = { git = "https://github.com/Eoghanmc22/mate-rov-2025.git" }
+# stable_hashmap = { path = "../mate-rov-2025/stable_hashmap" }
 
 [profile.release]
 debug = true
