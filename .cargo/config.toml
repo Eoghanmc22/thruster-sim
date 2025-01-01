@@ -5,3 +5,4 @@ rustflags = ["-C", "link-arg=-fuse-ld=/usr/bin/mold", "-Zshare-generics=y"]
 
 [target.wasm32-unknown-unknown]
 runner = "wasm-server-runner"
+rustflags = ["--cfg=web_sys_unstable_apis"]
