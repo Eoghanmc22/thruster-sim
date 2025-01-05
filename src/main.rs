@@ -111,7 +111,7 @@ enum StrengthMesh {
 }
 
 #[derive(Component)]
-struct AccentPoint(Point<FloatType>, bool, f32);
+struct AccentPoint(Point<FloatType>, bool, f32, Ascent, usize);
 
 #[derive(Component)]
 struct CurrentConfig;
@@ -802,7 +802,7 @@ fn add_motor(
                 radius: 0.15,
                 half_height: 0.15 / 2.0,
             }),
-            material: materials_pbr.add(Color::from(color::palettes::css::DARK_GRAY)),
+            material: materials_pbr.add(Color::from(color::palettes::css::BLACK)),
             ..default()
         },
         MotorMarker(motor_id, false),
@@ -832,7 +832,7 @@ fn make_strength_mesh(
     motor_data: &MotorData,
     mesh_type: StrengthMesh,
 ) -> Mesh {
-    let generated = IcoSphere::new(5, |point| {
+    let generated = IcoSphere::new(10, |point| {
         let movement = match mesh_type {
             StrengthMesh::Force => Movement {
                 force: Vector3::from(point.normalize()).cast::<FloatType>(),
@@ -987,7 +987,7 @@ fn handle_heuristic_change(
                     material: materials_pbr.add(Color::WHITE),
                     ..default()
                 },
-                AccentPoint(point, false, 0.0),
+                AccentPoint(point, false, 0.0, Ascent::default(), 0),
                 RenderLayers::layer(3),
             ));
         }
@@ -1005,10 +1005,15 @@ fn step_accent_points(
         if !point.1 {
             let result = gradient_ascent(&point.0, &score_settings.0.flatten(), &motor_data.0);
 
+            if point.3.gradient.dot(&result.gradient) < 0.0 {
+                point.4 += 1;
+            }
+
             point.0 = result.new_point;
-            point.1 =
-                result.gradient.norm_squared() < CRITICAL_POINT_EPSILON * CRITICAL_POINT_EPSILON;
+            point.1 = point.4 >= 2
+                && result.gradient.norm_squared() < CRITICAL_POINT_EPSILON * CRITICAL_POINT_EPSILON;
             point.2 = result.old_score as f32;
+            point.3 = result;
         }
     });
 
@@ -1042,7 +1047,7 @@ fn step_accent_points(
         let current_score =
             optimize::evaluate(&motor_conf.0, &score_settings.0.flatten(), &motor_data.0) as f32;
 
-        if best_score - current_score > 0.002 {
+        if best_score - current_score > 0.005 {
             commands.insert_resource(MotorConfigRes(best));
         }
     }
@@ -1229,11 +1234,13 @@ fn auto_generate_constraints(
             *auto_generate = AutoGenerate::Solve(time.elapsed());
         }
         AutoGenerate::Solve(start) => {
-            let min_duration = Duration::from_secs_f32(0.75);
+            // let min_duration = Duration::from_secs_f32(0.75);
+            let min_duration = Duration::from_secs_f32(2.5);
 
-            let done = points
-                .iter()
-                .all(|it| it.1 .1 || rand::random::<f32>() < 0.927);
+            // let done = points
+            //     .iter()
+            //     .all(|it| it.1 .1 || rand::random::<f32>() < 0.92);
+            let done = true;
 
             if done && time.elapsed() > start + min_duration {
                 *auto_generate = AutoGenerate::Show(time.elapsed());
@@ -1277,10 +1284,10 @@ fn toggle_auto_gen_on_space(
     }
 }
 
-pub const STEP_SIZE: FloatType = 0.002;
-pub const MAX_STEP_SIZE: FloatType = 0.005;
+pub const STEP_SIZE: FloatType = 0.01;
+pub const MAX_STEP_SIZE: FloatType = 0.002;
 pub const DIMENSIONALITY: usize = 3;
-pub const CRITICAL_POINT_EPSILON: FloatType = 0.05;
+pub const CRITICAL_POINT_EPSILON: FloatType = 0.1;
 pub type Point<D> = SVector<D, DIMENSIONALITY>;
 
 pub fn initial_points(count: usize) -> Vec<Point<FloatType>> {
@@ -1333,7 +1340,7 @@ fn gradient_ascent(
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 struct Ascent {
     old_point: Point<FloatType>,
     new_point: Point<FloatType>,
