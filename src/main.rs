@@ -38,7 +38,7 @@ fn main() {
             DefaultPlugins.set(WindowPlugin {
                 primary_window: Some(Window {
                     present_mode: PresentMode::AutoNoVsync, // Reduces input lag.
-                    // fit_canvas_to_parent: true,
+                    fit_canvas_to_parent: true,
                     ..default()
                 }),
                 ..default()
