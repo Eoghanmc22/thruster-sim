@@ -1,3 +1,4 @@
+use std::panic;
 use std::{collections::BTreeMap, time::Duration};
 
 use bevy::color;
@@ -31,7 +32,12 @@ use num_dual::gradient;
 use thruster_sim::{heuristic::ScoreSettings, optimize, HEIGHT, LENGTH, WIDTH};
 
 fn main() {
-    let motor_data = motor_preformance::read_motor_data("motor_data.csv").expect("Read motor data");
+    // let motor_data = motor_preformance::read_motor_data("motor_data.csv").expect("Read motor data");
+
+    panic::set_hook(Box::new(console_error_panic_hook::hook));
+    let motor_data =
+        motor_preformance::read_motor_data_from_string(include_str!("../motor_data.csv"))
+            .expect("Read motor data");
 
     App::new()
         .add_plugins((
