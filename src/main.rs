@@ -32,12 +32,15 @@ use num_dual::gradient;
 use thruster_sim::{heuristic::ScoreSettings, optimize, HEIGHT, LENGTH, WIDTH};
 
 fn main() {
-    // let motor_data = motor_preformance::read_motor_data("motor_data.csv").expect("Read motor data");
-
-    panic::set_hook(Box::new(console_error_panic_hook::hook));
+    #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
     let motor_data =
+        motor_preformance::read_motor_data_from_path("motor_data.csv").expect("Read motor data");
+    #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+    let motor_data = {
+        panic::set_hook(Box::new(console_error_panic_hook::hook));
         motor_preformance::read_motor_data_from_string(include_str!("../motor_data.csv"))
-            .expect("Read motor data");
+            .expect("Read motor data")
+    };
 
     App::new()
         .add_plugins((
