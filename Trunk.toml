@@ -1,0 +1,7 @@
+[[hooks]]
+stage = "post_build"
+command = "fish"
+command_arguments = [
+  "-c",
+  "for wasm in $TRUNK_STAGING_DIR/*.wasm; cargo wasm2map -p $wasm -b http://127.0.0.1:8080/; end",
+]
