@@ -1,3 +1,7 @@
+#![feature(coroutines)]
+#![feature(iter_from_coroutine)]
+#![feature(generic_const_exprs)]
+
 use motor_math::FloatType;
 
 pub mod heuristic;

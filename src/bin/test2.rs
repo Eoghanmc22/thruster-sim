@@ -1,7 +1,7 @@
 #![allow(incomplete_features)]
 #![feature(lazy_type_alias)]
 
-use core::f64;
+use std::fs;
 
 use motor_math::{
     motor_preformance::{self, MotorData},
@@ -9,61 +9,43 @@ use motor_math::{
     x3d::X3dMotorId,
     Direction, ErasedMotorId, FloatType, Motor, MotorConfig, Number,
 };
-use nalgebra::{vector, SVector};
-use num_dual::gradient;
+use nalgebra::{vector, Const, SVector};
+use num_dual::{gradient, DualVec};
 use thruster_sim::{
-    heuristic::ScoreSettings,
-    optimize::{self, fibonacci_sphere},
+    heuristic::{ScoreResult, ScoreSettings},
+    optimize,
 };
 
-pub const STEP_SIZE: FloatType = 0.1;
+pub const STEP_SIZE: FloatType = 0.000001;
 pub const DIMENSIONALITY: usize = 3;
 pub const CRITICAL_POINT_EPSILON: FloatType = 0.01;
 
 pub type Point<D: Number> = SVector<D, DIMENSIONALITY>;
 
 fn main() {
-    let motor_data = motor_preformance::read_motor_data("motor_data.csv").expect("Read motor data");
+    let motor_data =
+        motor_preformance::read_motor_data_from_path("motor_data.csv").expect("Read motor data");
 
-    let mut points = initial_points(100);
-    let mut completed_points = vec![];
-    let heuristic = ScoreSettings::default();
+    let vector = vector![0.254, -0.571, 0.781];
 
-    let mut counter = 0;
-    while !points.is_empty() {
-        println!("{counter}");
-        let results = gradient_ascent(&points, &heuristic, &motor_data, STEP_SIZE);
-
-        let mut remaining_points = vec![];
-        for result in results {
-            // println!("{}", result.gradient);
-            println!("{:?}", result);
-            if result.gradient.norm_squared() < CRITICAL_POINT_EPSILON * CRITICAL_POINT_EPSILON {
-                // if (result.est_new_score - result.old_score) / STEP_SIZE < CRITICAL_POINT_EPSILON {
-                completed_points.push(result);
-            } else {
-                remaining_points.push(result.new_point);
-            }
-        }
-
-        points = remaining_points;
-        counter += 1;
-    }
-
-    completed_points.sort_by(|a, b| FloatType::total_cmp(&a.old_score, &b.old_score).reverse());
-
-    for result in completed_points.iter().take(10) {
-        println!("point: {:.04}", result.new_point);
-        println!(
-            "score: {:.02}, performance: {:?}",
-            result.old_score,
-            reverse::axis_maximums(&motor_config(result.new_point), &motor_data, 1.0, 0.01)
-        );
-    }
+    let config = motor_config(vector);
+    println!("config: {config:#.04?}");
+    println!("matrix: {:.04}", config.matrix);
+    println!("inverse: {:.04}", config.pseudo_inverse);
+    let maximums = reverse::axis_maximums(&config, &motor_data, 25.0, 0.00001);
+    println!("maximums: {maximums:#.04?}");
+    let score = optimize::evaluate(&config, &Default::default(), &motor_data);
+    println!("score: {score:#.04?}");
 }
 
 pub fn initial_points(count: usize) -> Vec<Point<FloatType>> {
-    optimize::fibonacci_sphere(count)
+    let mut points = vec![];
+
+    for _ in 0..count {
+        points.push(Point::from_fn(|_, _| rand::random()));
+    }
+
+    points
 }
 
 pub fn motor_config<D: Number>(point: Point<D>) -> MotorConfig<ErasedMotorId, D> {
@@ -89,10 +71,16 @@ fn gradient_ascent<'a>(
     step_size: FloatType,
 ) -> impl Iterator<Item = Ascent> + use<'a> {
     points.iter().map(move |&old_point| {
+        let mut result = None;
+
         let (score, grad) = gradient(
             |point| {
                 let motor_config = motor_config(point);
-                optimize::evaluate(&motor_config, heuristic, motor_data)
+                let (score, score_breakdown) =
+                    optimize::evaluate(&motor_config, heuristic, motor_data);
+                result = Some(score_breakdown);
+
+                score
             },
             old_point,
         );
@@ -107,11 +95,12 @@ fn gradient_ascent<'a>(
             old_score: score,
             est_new_score: score + grad.dot(&delta),
             gradient: grad,
+            score_breakdown: result.unwrap(),
         }
     })
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Ascent {
     old_point: Point<FloatType>,
     new_point: Point<FloatType>,
@@ -120,4 +109,5 @@ struct Ascent {
     est_new_score: FloatType,
 
     gradient: Point<FloatType>,
+    score_breakdown: ScoreResult<DualVec<FloatType, FloatType, Const<DIMENSIONALITY>>>,
 }

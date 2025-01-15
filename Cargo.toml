@@ -48,12 +48,12 @@ hexasphere = "12"
 rand = "0.8"
 
 
-motor_math = { git = "https://github.com/Eoghanmc22/mate-rov-2025.git", features = [
-  "double_precision",
-] }
-# motor_math = { path = "../mate-rov-2025/motor_math", features = [
+# motor_math = { git = "https://github.com/Eoghanmc22/mate-rov-2025.git", features = [
 #   "double_precision",
 # ] }
+motor_math = { path = "../mate-rov-2025/motor_math", features = [
+  "double_precision",
+] }
 stable_hashmap = { git = "https://github.com/Eoghanmc22/mate-rov-2025.git" }
 console_error_panic_hook = "0.1.7"
 # stable_hashmap = { path = "../mate-rov-2025/stable_hashmap" }
