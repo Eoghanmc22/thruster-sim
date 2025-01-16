@@ -1,4 +1,3 @@
-use std::panic;
 use std::{collections::BTreeMap, time::Duration};
 
 use bevy::color;
@@ -566,6 +565,15 @@ fn render_gui(
                     .changed();
             });
 
+            //             center_of_mass_loss: todo!(),
+            // center_loss: todo!(),
+            // surface_area_loss: todo!(),
+            // dimension_loss: todo!(),
+            // tube_exclusion_radius: todo!(),
+            // tube_exclusion_loss: todo!(),
+            // thruster_exclusion_radius: todo!(),
+            // thruster_exclusion_loss: todo!(),
+
             if updated {
                 commands.insert_resource(ScoreSettingsRes(settings));
             }
@@ -669,6 +677,7 @@ fn update_motor_conf(
                         &score_settings.0.flatten(),
                         &motor_data.0,
                     )
+                    .0
                     * 0.3)
                     .cast::<f32>()
                     .into(),
@@ -885,7 +894,7 @@ fn make_heuristic_meshes(score_settings: &ScoreSettings, motor_data: &MotorData)
             vector![0.0, 0.0, 0.0],
         );
 
-        let score = optimize::evaluate(&motor_config, score_settings, motor_data);
+        let score = optimize::evaluate(&motor_config, score_settings, motor_data).0;
 
         score.clamp(0.0, 10.0) as f32 * 0.3
     });
@@ -900,7 +909,7 @@ fn make_heuristic_meshes(score_settings: &ScoreSettings, motor_data: &MotorData)
             vector![0.0, 0.0, 0.0],
         );
 
-        let score = optimize::evaluate(&motor_config, score_settings, motor_data);
+        let score = optimize::evaluate(&motor_config, score_settings, motor_data).0;
 
         score.clamp(-10.0, 0.0).abs() as f32 * 0.3
     });
@@ -1054,7 +1063,7 @@ fn step_accent_points(
 
     if let Some((best, best_score)) = best {
         let current_score =
-            optimize::evaluate(&motor_conf.0, &score_settings.0.flatten(), &motor_data.0) as f32;
+            optimize::evaluate(&motor_conf.0, &score_settings.0.flatten(), &motor_data.0).0 as f32;
 
         if best_score - current_score > 0.005 {
             commands.insert_resource(MotorConfigRes(best));
@@ -1087,6 +1096,15 @@ pub struct ToggleableScoreSettings {
     pub x_rot: (bool, FloatType),
     pub y_rot: (bool, FloatType),
     pub z_rot: (bool, FloatType),
+
+    pub center_of_mass_loss: (bool, FloatType),
+    pub center_loss: (bool, FloatType),
+    pub surface_area_loss: (bool, FloatType),
+    pub dimension_loss: (bool, FloatType),
+    pub tube_exclusion_radius: (bool, FloatType),
+    pub tube_exclusion_loss: (bool, FloatType),
+    pub thruster_exclusion_radius: (bool, FloatType),
+    pub thruster_exclusion_loss: (bool, FloatType),
 }
 
 impl ToggleableScoreSettings {
@@ -1158,6 +1176,47 @@ impl ToggleableScoreSettings {
             x_rot: if self.x_rot.0 { self.x_rot.1 } else { 0.0 },
             y_rot: if self.y_rot.0 { self.y_rot.1 } else { 0.0 },
             z_rot: if self.z_rot.0 { self.z_rot.1 } else { 0.0 },
+
+            center_of_mass_loss: if self.center_of_mass_loss.0 {
+                self.center_of_mass_loss.1
+            } else {
+                0.0
+            },
+            center_loss: if self.center_loss.0 {
+                self.center_loss.1
+            } else {
+                0.0
+            },
+            surface_area_loss: if self.surface_area_loss.0 {
+                self.surface_area_loss.1
+            } else {
+                0.0
+            },
+            dimension_loss: if self.dimension_loss.0 {
+                self.dimension_loss.1
+            } else {
+                0.0
+            },
+            tube_exclusion_radius: if self.tube_exclusion_radius.0 {
+                self.tube_exclusion_radius.1
+            } else {
+                0.0
+            },
+            tube_exclusion_loss: if self.tube_exclusion_loss.0 {
+                self.tube_exclusion_loss.1
+            } else {
+                0.0
+            },
+            thruster_exclusion_radius: if self.thruster_exclusion_radius.0 {
+                self.thruster_exclusion_radius.1
+            } else {
+                0.0
+            },
+            thruster_exclusion_loss: if self.thruster_exclusion_loss.0 {
+                self.thruster_exclusion_loss.1
+            } else {
+                0.0
+            },
         }
     }
 }
@@ -1185,6 +1244,14 @@ impl Default for ToggleableScoreSettings {
             x_rot: (true, base.x_rot),
             y_rot: (true, base.y_rot),
             z_rot: (true, base.z_rot),
+            center_of_mass_loss: (true, base.center_of_mass_loss),
+            center_loss: (true, base.center_loss),
+            surface_area_loss: (true, base.surface_area_loss),
+            dimension_loss: (true, base.dimension_loss),
+            tube_exclusion_radius: (true, base.tube_exclusion_radius),
+            tube_exclusion_loss: (true, base.tube_exclusion_loss),
+            thruster_exclusion_radius: (true, base.thruster_exclusion_radius),
+            thruster_exclusion_loss: (true, base.thruster_exclusion_loss),
         }
     }
 }
@@ -1238,6 +1305,26 @@ fn auto_generate_constraints(
                 x_rot: (rand::random(), rand::random::<FloatType>() / 2.0 + 0.25),
                 y_rot: (rand::random(), rand::random::<FloatType>() / 2.0 + 0.25),
                 z_rot: (rand::random(), rand::random::<FloatType>() / 2.0 + 0.25),
+
+                // center_of_mass_loss: (rand::random(), rand::random::<FloatType>() * 2.0 - 1.0),
+                // center_loss: (rand::random(), rand::random::<FloatType>() * 2.0 - 1.0),
+                // surface_area_loss: (rand::random(), rand::random::<FloatType>() * 2.0 - 1.0),
+                // dimension_loss: (rand::random(), rand::random::<FloatType>() * 2.0 - 1.0),
+                // tube_exclusion_radius: (rand::random(), rand::random::<FloatType>() * 2.0 - 1.0),
+                // tube_exclusion_loss: (rand::random(), rand::random::<FloatType>() * 2.0 - 1.0),
+                // thruster_exclusion_radius: (
+                //     rand::random(),
+                //     rand::random::<FloatType>() * 2.0 - 1.0,
+                // ),
+                // thruster_exclusion_loss: (rand::random(), rand::random::<FloatType>() * 2.0 - 1.0),
+                center_of_mass_loss: (false, rand::random::<FloatType>() * 2.0 - 1.0),
+                center_loss: (false, rand::random::<FloatType>() * 2.0 - 1.0),
+                surface_area_loss: (false, rand::random::<FloatType>() * 2.0 - 1.0),
+                dimension_loss: (false, rand::random::<FloatType>() * 2.0 - 1.0),
+                tube_exclusion_radius: (false, rand::random::<FloatType>() * 2.0 - 1.0),
+                tube_exclusion_loss: (false, rand::random::<FloatType>() * 2.0 - 1.0),
+                thruster_exclusion_radius: (false, rand::random::<FloatType>() * 2.0 - 1.0),
+                thruster_exclusion_loss: (false, rand::random::<FloatType>() * 2.0 - 1.0),
             };
 
             *auto_generate = AutoGenerate::Solve(time.elapsed());
@@ -1291,71 +1378,4 @@ fn toggle_auto_gen_on_space(
             }
         }
     }
-}
-
-pub const STEP_SIZE: FloatType = 0.01;
-pub const MAX_STEP_SIZE: FloatType = 0.002;
-pub const DIMENSIONALITY: usize = 3;
-pub const CRITICAL_POINT_EPSILON: FloatType = 0.1;
-pub type Point<D> = SVector<D, DIMENSIONALITY>;
-
-pub fn initial_points(count: usize) -> Vec<Point<FloatType>> {
-    optimize::fibonacci_sphere(count)
-}
-
-pub fn motor_config<D: Number>(point: Point<D>) -> MotorConfig<X3dMotorId, D> {
-    MotorConfig::<X3dMotorId, _>::new(
-        Motor {
-            position: (vector![WIDTH, LENGTH, HEIGHT] / 2.0).map(D::from),
-            orientation: point,
-            direction: Direction::Clockwise,
-        },
-        vector![0.0, 0.0, 0.0].map(D::from),
-    )
-}
-
-pub fn normalise_point<D: Number>(point: Point<D>) -> Point<D> {
-    point.normalize()
-}
-
-fn gradient_ascent(
-    &old_point: &Point<FloatType>,
-    heuristic: &ScoreSettings,
-    motor_data: &MotorData,
-) -> Ascent {
-    let (score, grad) = gradient(
-        |point| {
-            let motor_config = motor_config(point);
-            optimize::evaluate(&motor_config, heuristic, motor_data)
-        },
-        old_point,
-    );
-
-    let mut delta = STEP_SIZE * grad;
-    let norm = delta.norm();
-    if norm > MAX_STEP_SIZE {
-        delta.unscale_mut(norm / MAX_STEP_SIZE);
-    }
-
-    let new_point = normalise_point(old_point + delta);
-    let delta = new_point - old_point;
-
-    Ascent {
-        old_point,
-        new_point,
-        old_score: score,
-        est_new_score: score + grad.dot(&delta),
-        gradient: grad,
-    }
-}
-
-#[derive(Debug, Default)]
-struct Ascent {
-    old_point: Point<FloatType>,
-    new_point: Point<FloatType>,
-
-    old_score: FloatType,
-    est_new_score: FloatType,
-
-    gradient: Point<FloatType>,
 }

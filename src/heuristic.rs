@@ -1,5 +1,5 @@
 use motor_math::{solve::reverse::Axis, FloatType, MotorConfig, Number};
-use nalgebra::{vector, zero, Normed, SVector};
+use nalgebra::{vector, SVector};
 use stable_hashmap::StableHashMap;
 use std::fmt::Debug;
 use std::hash::Hash;

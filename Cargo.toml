@@ -6,8 +6,8 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-num-dual = { git = "https://github.com/Eoghanmc22/num-dual.git", rev = "08b163b101cde7e3fa113a6bb93a6423eaf0b875" }
-# num-dual = { path = "../num-dual" }
+# num-dual = { git = "https://github.com/Eoghanmc22/num-dual.git", rev = "08b163b101cde7e3fa113a6bb93a6423eaf0b875" }
+num-dual = { path = "../num-dual" }
 anyhow = "1"
 csv = "1"
 # ahash = "0.8"
@@ -15,6 +15,7 @@ serde = { version = "1", features = ["derive"] }
 itertools = "0.14"
 time = { version = "0.3", features = ["local-offset"] }
 nalgebra = { version = "0.33", features = ["convert-glam027"] }
+rayon = "1.10"
 
 bevy = { version = "0.14", default-features = false, features = [
   "wayland",
