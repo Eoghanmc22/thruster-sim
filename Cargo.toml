@@ -6,8 +6,8 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-# num-dual = { git = "https://github.com/Eoghanmc22/num-dual.git", rev = "08b163b101cde7e3fa113a6bb93a6423eaf0b875" }
-num-dual = { path = "../num-dual" }
+num-dual = { git = "https://github.com/Eoghanmc22/num-dual.git", rev = "62e12f43f24de5eb8c7e22f208436e3be8dc1ea4" }
+# num-dual = { path = "../num-dual" }
 anyhow = "1"
 csv = "1"
 # ahash = "0.8"
@@ -49,12 +49,12 @@ hexasphere = "12"
 rand = "0.8"
 
 
-# motor_math = { git = "https://github.com/Eoghanmc22/mate-rov-2025.git", features = [
-#   "double_precision",
-# ] }
-motor_math = { path = "../mate-rov-2025/motor_math", features = [
+motor_math = { git = "https://github.com/Eoghanmc22/mate-rov-2025.git", features = [
   "double_precision",
 ] }
+# motor_math = { path = "../mate-rov-2025/motor_math", features = [
+#   "double_precision",
+# ] }
 stable_hashmap = { git = "https://github.com/Eoghanmc22/mate-rov-2025.git" }
 console_error_panic_hook = "0.1.7"
 # stable_hashmap = { path = "../mate-rov-2025/stable_hashmap" }

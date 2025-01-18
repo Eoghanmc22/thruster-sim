@@ -2763,6 +2763,7 @@ dependencies = [
 [[package]]
 name = "motor_math"
 version = "0.1.0"
+source = "git+https://github.com/Eoghanmc22/mate-rov-2025.git#7b7814686392354403c7d0b487eda2ce62eb1d3c"
 dependencies = [
  "anyhow",
  "bevy_reflect",
@@ -2772,7 +2773,7 @@ dependencies = [
  "num-dual",
  "num_enum",
  "serde",
- "stable_hashmap 0.1.0",
+ "stable_hashmap",
  "tracing",
 ]
 
@@ -2998,6 +2999,7 @@ dependencies = [
 [[package]]
 name = "num-dual"
 version = "0.11.0"
+source = "git+https://github.com/Eoghanmc22/num-dual.git?rev=62e12f43f24de5eb8c7e22f208436e3be8dc1ea4#62e12f43f24de5eb8c7e22f208436e3be8dc1ea4"
 dependencies = [
  "approx",
  "nalgebra",
@@ -3941,14 +3943,7 @@ checksum = "a8f112729512f8e442d81f95a8a7ddf2b7c6b8a1a6f509a95864142b30cab2d3"
 [[package]]
 name = "stable_hashmap"
 version = "0.1.0"
-dependencies = [
- "ahash",
-]
-
-[[package]]
-name = "stable_hashmap"
-version = "0.1.0"
-source = "git+https://github.com/Eoghanmc22/mate-rov-2025.git#4c362688ef961422a461723a5874a99005c3d351"
+source = "git+https://github.com/Eoghanmc22/mate-rov-2025.git#7b7814686392354403c7d0b487eda2ce62eb1d3c"
 dependencies = [
  "ahash",
 ]
@@ -4074,7 +4069,7 @@ dependencies = [
  "rand",
  "rayon",
  "serde",
- "stable_hashmap 0.1.0 (git+https://github.com/Eoghanmc22/mate-rov-2025.git)",
+ "stable_hashmap",
  "time",
 ]
 
