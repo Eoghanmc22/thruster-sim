@@ -2,12 +2,12 @@ use itertools::Itertools;
 use motor_math::{
     motor_preformance::MotorData, solve::reverse, ErasedMotorId, FloatType, MotorConfig, Number,
 };
-use nalgebra::{vector, Const, SMatrix, SVector, Vector3};
+use nalgebra::{vector, Const, DMatrix, SMatrix, Vector3};
 use num_dual::{gradient, DualVec};
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
-use std::{fmt::Debug, hash::Hash, iter, usize};
+use std::{fmt::Debug, hash::Hash, iter};
 
-use crate::heuristic::{score, ScoreResult, ScoreSettings};
+use crate::heuristic::{score, Scaled, ScoreResult, ScoreSettings, Unscaled};
 
 pub fn fibonacci_sphere(samples: usize) -> impl Iterator<Item = Vector3<FloatType>> {
     iter::from_coroutine(
@@ -34,18 +34,20 @@ pub fn evaluate<MotorId: Debug + Ord + Hash + Clone, D: Number>(
     motor_config: &MotorConfig<MotorId, D>,
     settings: &ScoreSettings,
     motor_data: &MotorData,
-) -> (D, ScoreResult<D>) {
-    let result = reverse::axis_maximums(motor_config, motor_data, 0.5, 0.001);
+) -> (D, ScoreResult<D, Unscaled>) {
+    // TODO: Use 25 amps / make consistant with other calls
+    let result = reverse::axis_maximums(motor_config, motor_data, 25.0, 0.001);
     score(&result, motor_config, settings)
 }
 
 // Adam without weight decay
 pub fn adam_optimizer<const DIM1: usize, const DIM2: usize, Config>(
-    old_point: &OptimizationPoint<Config::Point<FloatType>>,
+    old_point: &OptimizationState<Config::Point<FloatType>>,
     config: &Config,
     heuristic: &ScoreSettings,
     motor_data: &MotorData,
     step_size: FloatType,
+    frontier_ratio_threshold: FloatType,
 ) -> Ascent<DIM1, DIM2>
 where
     // This feels wrong
@@ -92,12 +94,18 @@ where
             * first_moment_hat
                 .component_div(&second_moment_hat.map(|it| it.sqrt()).add_scalar(epsilon));
 
-    let new_point = OptimizationPoint {
+    let mut frontier_threshold = old_point.frontier_threshold;
+    if (frontier_threshold.0 * frontier_ratio_threshold).abs() < score.abs() {
+        frontier_threshold = (score, new_time);
+    }
+
+    let new_point = OptimizationState {
         point: config.normalise_point::<FloatType>(new_point),
         first_moment: new_first_moment,
         second_moment: new_second_moment,
         time: new_time,
-        ..old_point.clone()
+        frontier_threshold,
+        ..old_point
     };
 
     let delta = new_point.point - old_point.point;
@@ -114,36 +122,38 @@ where
 
 #[derive(Debug, Clone)]
 pub struct Ascent<const DIM1: usize, const DIM2: usize> {
-    pub old_point: OptimizationPoint<SMatrix<FloatType, DIM1, DIM2>>,
-    pub new_point: OptimizationPoint<SMatrix<FloatType, DIM1, DIM2>>,
+    pub old_point: OptimizationState<SMatrix<FloatType, DIM1, DIM2>>,
+    pub new_point: OptimizationState<SMatrix<FloatType, DIM1, DIM2>>,
 
     pub old_score: FloatType,
     pub est_new_score: FloatType,
 
     pub gradient: SMatrix<FloatType, DIM1, DIM2>,
-    pub score_breakdown: ScoreResult<DualVec<FloatType, FloatType, Const<DIM1>, Const<DIM2>>>,
+    pub score_breakdown:
+        ScoreResult<DualVec<FloatType, FloatType, Const<DIM1>, Const<DIM2>>, Unscaled>,
 }
 
 #[derive(Debug, Clone)]
-pub struct OptimizationPoint<Point> {
+pub struct OptimizationState<Point> {
     pub point: Point,
 
     pub first_moment: Point,
     pub second_moment: Point,
 
-    pub fountier_threshold: (FloatType, usize),
-
+    pub frontier_threshold: (FloatType, i32),
     pub time: i32,
+    pub done: bool,
 }
 
-impl<const DIM1: usize, const DIM2: usize> OptimizationPoint<SMatrix<FloatType, DIM1, DIM2>> {
+impl<const DIM1: usize, const DIM2: usize> OptimizationState<SMatrix<FloatType, DIM1, DIM2>> {
     pub fn new(point: SMatrix<FloatType, DIM1, DIM2>) -> Self {
         Self {
             point,
             first_moment: SMatrix::zeros(),
             second_moment: SMatrix::zeros(),
             time: 0,
-            fountier_threshold: (FloatType::NEG_INFINITY, 0),
+            frontier_threshold: (FloatType::NEG_INFINITY, 0),
+            done: false,
         }
     }
 }
@@ -157,7 +167,7 @@ pub trait OptimizableConfig {
     fn initial_points(
         &self,
         count: usize,
-    ) -> impl Iterator<Item = OptimizationPoint<Self::Point<FloatType>>>;
+    ) -> impl Iterator<Item = OptimizationState<Self::Point<FloatType>>>;
     fn motor_config<D: Number>(&self, point: Self::Point<D>) -> MotorConfig<Self::MotorId, D>;
     fn normalise_point<D: Number>(&self, point: Self::Point<D>) -> Self::Point<D>;
 }
@@ -166,12 +176,12 @@ pub mod x3d_fixed {
     use motor_math::{x3d::X3dMotorId, Direction, FloatType, Motor, MotorConfig, Number};
     use nalgebra::{vector, SVector};
 
-    use super::{OptimizableConfig, OptimizationPoint};
+    use super::{OptimizableConfig, OptimizationState};
 
     pub struct FixedX3dOptimization {
-        width: FloatType,
-        length: FloatType,
-        height: FloatType,
+        pub width: FloatType,
+        pub length: FloatType,
+        pub height: FloatType,
     }
 
     impl OptimizableConfig for FixedX3dOptimization {
@@ -183,8 +193,8 @@ pub mod x3d_fixed {
         fn initial_points(
             &self,
             count: usize,
-        ) -> impl Iterator<Item = OptimizationPoint<Self::Point<FloatType>>> {
-            super::fibonacci_sphere(count).map(OptimizationPoint::new)
+        ) -> impl Iterator<Item = OptimizationState<Self::Point<FloatType>>> {
+            super::fibonacci_sphere(count).map(OptimizationState::new)
         }
 
         fn motor_config<D: Number>(&self, point: Self::Point<D>) -> MotorConfig<Self::MotorId, D> {
@@ -208,7 +218,7 @@ pub mod x3d_dyn {
     use motor_math::{x3d::X3dMotorId, Direction, FloatType, Motor, MotorConfig, Number};
     use nalgebra::{vector, Const, Matrix3x2, SVector, U1};
 
-    use super::{OptimizableConfig, OptimizationPoint};
+    use super::{OptimizableConfig, OptimizationState};
 
     pub struct DynamicX3dOptimization;
 
@@ -221,14 +231,14 @@ pub mod x3d_dyn {
         fn initial_points(
             &self,
             count: usize,
-        ) -> impl Iterator<Item = OptimizationPoint<Self::Point<FloatType>>> {
+        ) -> impl Iterator<Item = OptimizationState<Self::Point<FloatType>>> {
             super::fibonacci_sphere(count)
                 .map(|dir| {
                     let pos = SVector::<FloatType, 3>::from_fn(|_, _| rand::random());
                     Matrix3x2::from_columns(&[pos, dir])
                         .reshape_generic(Const::<{ Self::DIMENSIONALITY }>, U1)
                 })
-                .map(OptimizationPoint::new)
+                .map(OptimizationState::new)
         }
 
         fn motor_config<D: Number>(&self, point: Self::Point<D>) -> MotorConfig<Self::MotorId, D> {
@@ -254,7 +264,7 @@ pub mod symetrical {
     };
     use nalgebra::{vector, SMatrix};
 
-    use super::{OptimizableConfig, OptimizationPoint};
+    use super::{OptimizableConfig, OptimizationState};
 
     pub struct SymerticalOptimization<const HALF_THRUSTER_COUNT: usize>;
 
@@ -269,10 +279,10 @@ pub mod symetrical {
         fn initial_points(
             &self,
             count: usize,
-        ) -> impl Iterator<Item = OptimizationPoint<Self::Point<FloatType>>> {
+        ) -> impl Iterator<Item = OptimizationState<Self::Point<FloatType>>> {
             (0..count)
                 .map(|_| Self::Point::<FloatType>::from_fn(|_, _| rand::random()))
-                .map(OptimizationPoint::new)
+                .map(OptimizationState::new)
         }
 
         fn motor_config<D: Number>(&self, point: Self::Point<D>) -> MotorConfig<Self::MotorId, D> {
@@ -321,7 +331,7 @@ pub mod full {
     };
     use nalgebra::{vector, SMatrix};
 
-    use super::{OptimizableConfig, OptimizationPoint};
+    use super::{OptimizableConfig, OptimizationState};
 
     pub struct FullOptimization<const THRUSTER_COUNT: usize>;
 
@@ -334,10 +344,10 @@ pub mod full {
         fn initial_points(
             &self,
             count: usize,
-        ) -> impl Iterator<Item = OptimizationPoint<Self::Point<FloatType>>> {
+        ) -> impl Iterator<Item = OptimizationState<Self::Point<FloatType>>> {
             (0..count)
                 .map(|_| Self::Point::<FloatType>::from_fn(|_, _| rand::random()))
-                .map(OptimizationPoint::new)
+                .map(OptimizationState::new)
         }
 
         fn motor_config<D: Number>(&self, point: Self::Point<D>) -> MotorConfig<Self::MotorId, D> {
@@ -385,13 +395,32 @@ pub trait OptimizationArena {
     fn step<'a>(
         &'a mut self,
         motor_data: &MotorData,
-    ) -> Box<dyn Iterator<Item = (FloatType, MotorConfig<ErasedMotorId, FloatType>)> + 'a>;
+    ) -> Box<dyn Iterator<Item = OptimizationOutput> + 'a>;
+}
+
+pub struct OptimizationOutput {
+    pub score: FloatType,
+    pub motor_config: MotorConfig<ErasedMotorId, FloatType>,
+    pub parameters: DMatrix<FloatType>,
+    pub score_result_unscaled: ScoreResult<FloatType, Unscaled>,
+    pub score_result_scaled: ScoreResult<FloatType, Scaled>,
 }
 
 pub struct SyncOptimizationArena<Config: OptimizableConfig> {
     config: Config,
     heuristic: ScoreSettings,
-    points: Vec<(FloatType, OptimizationPoint<Config::Point<FloatType>>)>,
+    points: Vec<(
+        FloatType,
+        OptimizationState<Config::Point<FloatType>>,
+        ScoreResult<FloatType, Unscaled>,
+    )>,
+
+    /// The step size/learn rate
+    step_size: FloatType,
+    /// The ratio by which a points score must improve to be considered an improvement
+    frontier_ratio_threshold: FloatType,
+    /// The number of time steps a point must not improve for it to be considered done
+    frontier_time_limit: i32,
 }
 
 impl<Config: OptimizableConfig> SyncOptimizationArena<Config> {
@@ -400,6 +429,9 @@ impl<Config: OptimizableConfig> SyncOptimizationArena<Config> {
             config,
             heuristic: ScoreSettings::default(),
             points: vec![],
+            step_size: 0.01,
+            frontier_ratio_threshold: 1.01,
+            frontier_time_limit: 25,
         }
     }
 }
@@ -420,7 +452,7 @@ where
         self.points = self
             .config
             .initial_points(point_count)
-            .map(|it| (FloatType::NEG_INFINITY, it))
+            .map(|it| (FloatType::NEG_INFINITY, it, Default::default()))
             .collect_vec();
         self.heuristic = heuristic;
     }
@@ -428,19 +460,39 @@ where
     fn step<'a>(
         &'a mut self,
         motor_data: &MotorData,
-    ) -> Box<dyn Iterator<Item = (FloatType, MotorConfig<ErasedMotorId, FloatType>)> + 'a> {
-        for (score, point) in &mut self.points {
-            let ascent = adam_optimizer(point, &self.config, &self.heuristic, motor_data, 0.01);
-            *point = ascent.new_point;
-            *score = ascent.old_score;
+    ) -> Box<dyn Iterator<Item = OptimizationOutput> + 'a> {
+        for (score, point, breakdown) in &mut self.points {
+            if !point.done {
+                let ascent = adam_optimizer(
+                    point,
+                    &self.config,
+                    &self.heuristic,
+                    motor_data,
+                    self.step_size,
+                    self.frontier_ratio_threshold,
+                );
+                *point = ascent.new_point;
+                *score = ascent.old_score;
+                *breakdown = ascent.score_breakdown.to_float();
+
+                if point.time - point.frontier_threshold.1 > self.frontier_time_limit {
+                    point.done = true;
+                }
+            }
         }
 
         self.points.sort_by(|a, b| FloatType::total_cmp(&a.0, &b.0));
 
         Box::new(
-            self.points.iter().map(|(score, point)| {
-                (*score, self.config.motor_config(point.point).erase_lossy())
-            }),
+            self.points
+                .iter()
+                .map(|(score, point, breakdown)| OptimizationOutput {
+                    score: *score,
+                    motor_config: self.config.motor_config(point.point).erase_lossy(),
+                    parameters: DMatrix::from_column_slice(DIM1, DIM2, point.point.as_slice()),
+                    score_result_unscaled: breakdown.clone(),
+                    score_result_scaled: breakdown.scale(&self.heuristic),
+                }),
         )
     }
 }
@@ -448,7 +500,18 @@ where
 pub struct AsyncOptimizationArena<Config: OptimizableConfig> {
     config: Config,
     heuristic: ScoreSettings,
-    points: Vec<(FloatType, OptimizationPoint<Config::Point<FloatType>>)>,
+    points: Vec<(
+        FloatType,
+        OptimizationState<Config::Point<FloatType>>,
+        ScoreResult<FloatType, Unscaled>,
+    )>,
+
+    /// The step size/learn rate
+    step_size: FloatType,
+    /// The ratio by which a points score must improve to be considered an improvement
+    frontier_ratio_threshold: FloatType,
+    /// The number of time steps a point must not improve for it to be considered done
+    frontier_time_limit: i32,
 }
 
 impl<Config: OptimizableConfig> AsyncOptimizationArena<Config> {
@@ -457,6 +520,9 @@ impl<Config: OptimizableConfig> AsyncOptimizationArena<Config> {
             config,
             heuristic: ScoreSettings::default(),
             points: vec![],
+            step_size: 0.01,
+            frontier_ratio_threshold: 1.01,
+            frontier_time_limit: 25,
         }
     }
 }
@@ -479,7 +545,7 @@ where
         self.points = self
             .config
             .initial_points(point_count)
-            .map(|it| (FloatType::NEG_INFINITY, it))
+            .map(|it| (FloatType::NEG_INFINITY, it, Default::default()))
             .collect_vec();
         self.heuristic = heuristic;
     }
@@ -487,19 +553,43 @@ where
     fn step<'a>(
         &'a mut self,
         motor_data: &MotorData,
-    ) -> Box<dyn Iterator<Item = (FloatType, MotorConfig<ErasedMotorId, FloatType>)> + 'a> {
-        self.points.par_iter_mut().for_each(|(score, point)| {
-            let ascent = adam_optimizer(point, &self.config, &self.heuristic, motor_data, 0.01);
-            *point = ascent.new_point;
-            *score = ascent.old_score;
-        });
+    ) -> Box<dyn Iterator<Item = OptimizationOutput> + 'a> {
+        self.points
+            .par_iter_mut()
+            .for_each(|(score, point, breakdown)| {
+                if !point.done {
+                    let ascent = adam_optimizer(
+                        point,
+                        &self.config,
+                        &self.heuristic,
+                        motor_data,
+                        self.step_size,
+                        self.frontier_ratio_threshold,
+                    );
 
-        self.points.sort_by(|a, b| FloatType::total_cmp(&a.0, &b.0));
+                    *point = ascent.new_point;
+                    *score = ascent.old_score;
+                    *breakdown = ascent.score_breakdown.to_float();
+
+                    if point.time - point.frontier_threshold.1 > self.frontier_time_limit {
+                        // point.done = true;
+                    }
+                }
+            });
+
+        self.points
+            .sort_by(|a, b| FloatType::total_cmp(&a.0, &b.0).reverse());
 
         Box::new(
-            self.points.iter().map(|(score, point)| {
-                (*score, self.config.motor_config(point.point).erase_lossy())
-            }),
+            self.points
+                .iter()
+                .map(|(score, point, breakdown)| OptimizationOutput {
+                    score: *score,
+                    motor_config: self.config.motor_config(point.point).erase_lossy(),
+                    parameters: DMatrix::from_column_slice(DIM1, DIM2, point.point.as_slice()),
+                    score_result_unscaled: breakdown.clone(),
+                    score_result_scaled: breakdown.scale(&self.heuristic),
+                }),
         )
     }
 }

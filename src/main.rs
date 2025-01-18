@@ -20,14 +20,21 @@ use bevy_egui::{
 };
 use bevy_panorbit_camera::{PanOrbitCamera, PanOrbitCameraPlugin};
 use hexasphere::shapes::IcoSphere;
+use motor_math::ErasedMotorId;
 use motor_math::{
     motor_preformance::{self, MotorData},
     solve::reverse,
     x3d::X3dMotorId,
     Direction, FloatType, Motor, MotorConfig, Movement, Number,
 };
-use nalgebra::{vector, SVector, Vector3};
+use nalgebra::{vector, DMatrix, SVector, Vector3};
 use num_dual::gradient;
+use thruster_sim::optimize::full::FullOptimization;
+use thruster_sim::optimize::symetrical::SymerticalOptimization;
+use thruster_sim::optimize::x3d_fixed::FixedX3dOptimization;
+use thruster_sim::optimize::{
+    AsyncOptimizationArena, OptimizationArena, OptimizationOutput, SyncOptimizationArena,
+};
 use thruster_sim::{heuristic::ScoreSettings, optimize, HEIGHT, LENGTH, WIDTH};
 
 fn main() {
@@ -65,6 +72,15 @@ fn main() {
         )
         .init_gizmo_group::<ThrustGizmo>()
         .insert_resource(ScoreSettingsRes(ToggleableScoreSettings::default()))
+        .insert_resource(OptimizerArenaRes(Box::new(AsyncOptimizationArena::new(
+            // FullOptimization::<6>,
+            SymerticalOptimization::<3>,
+            // FixedX3dOptimization {
+            //     width: WIDTH / 2.0,
+            //     length: LENGTH / 2.0,
+            //     height: HEIGHT / 2.0,
+            // },
+        ))))
         .insert_resource(MotorDataRes(motor_data))
         .insert_resource(ClearColor(Color::WHITE))
         .insert_resource(AutoGenerate::Off)
@@ -92,7 +108,7 @@ struct ThrustGizmo;
 struct AxisGizmo;
 
 #[derive(Resource)]
-struct MotorConfigRes(MotorConfig<X3dMotorId, FloatType>);
+struct MotorConfigRes(OptimizationOutput);
 #[derive(Resource)]
 pub struct MotorDataRes(pub MotorData);
 #[derive(Resource)]
@@ -105,8 +121,10 @@ pub enum AutoGenerate {
 }
 #[derive(Resource)]
 struct ScoreSettingsRes(ToggleableScoreSettings);
+#[derive(Resource)]
+struct OptimizerArenaRes(Box<dyn OptimizationArena + Send + Sync + 'static>);
 #[derive(Component)]
-struct MotorMarker(X3dMotorId, bool);
+struct MotorMarker(ErasedMotorId, bool);
 #[derive(Component)]
 enum HeuristicMesh {
     Positive,
@@ -118,8 +136,8 @@ enum StrengthMesh {
     Torque,
 }
 
-#[derive(Component)]
-struct AccentPoint(Point<FloatType>, bool, f32, Ascent, usize);
+// #[derive(Component)]
+// struct AccentPoint(Point<FloatType>, bool, f32, Ascent, usize);
 
 #[derive(Component)]
 struct CurrentConfig;
@@ -177,7 +195,8 @@ fn setup(
             direction: Direction::Clockwise,
         },
         vector![0.0, 0.0, 0.0],
-    );
+    )
+    .erase();
 
     add_motor_conf(
         &motor_conf,
@@ -186,7 +205,13 @@ fn setup(
         &mut meshes,
         &mut materials_pbr,
     );
-    commands.insert_resource(MotorConfigRes(motor_conf.clone()));
+    commands.insert_resource(MotorConfigRes(OptimizationOutput {
+        motor_config: motor_conf.clone(),
+        score: 0.0,
+        parameters: DMatrix::default(),
+        score_result_unscaled: Default::default(),
+        score_result_scaled: Default::default(),
+    }));
 
     // light
     ambiant.brightness = 150.0;
@@ -275,29 +300,29 @@ fn setup(
         CameraPos::LeftBottom,
     ));
 
-    let (positive, negative) = make_heuristic_meshes(&score_settings.0.flatten(), &motor_data.0);
-
-    commands.spawn((
-        PbrBundle {
-            mesh: meshes.add(positive),
-            material: materials_pbr.add(Color::srgb(0.4, 0.8, 0.3)),
-            transform: Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians())),
-            ..default()
-        },
-        HeuristicMesh::Positive,
-        RenderLayers::layer(3),
-    ));
-
-    commands.spawn((
-        PbrBundle {
-            mesh: meshes.add(negative),
-            material: materials_pbr.add(Color::srgb(0.8, 0.4, 0.3)),
-            transform: Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians())),
-            ..default()
-        },
-        HeuristicMesh::Negative,
-        RenderLayers::layer(3),
-    ));
+    // let (positive, negative) = make_heuristic_meshes(&score_settings.0.flatten(), &motor_data.0);
+    //
+    // commands.spawn((
+    //     PbrBundle {
+    //         mesh: meshes.add(positive),
+    //         material: materials_pbr.add(Color::srgb(0.4, 0.8, 0.3)),
+    //         transform: Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians())),
+    //         ..default()
+    //     },
+    //     HeuristicMesh::Positive,
+    //     RenderLayers::layer(3),
+    // ));
+    //
+    // commands.spawn((
+    //     PbrBundle {
+    //         mesh: meshes.add(negative),
+    //         material: materials_pbr.add(Color::srgb(0.8, 0.4, 0.3)),
+    //         transform: Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians())),
+    //         ..default()
+    //     },
+    //     HeuristicMesh::Negative,
+    //     RenderLayers::layer(3),
+    // ));
 }
 
 fn render_gui(
@@ -316,7 +341,7 @@ fn render_gui(
 
             let mut updated = false;
 
-            let text_width = 100.0;
+            let text_width = 200.0;
 
             ui.horizontal(|ui| {
                 let check = ui.checkbox(&mut settings.mes_linear.0, "MES Linear");
@@ -327,7 +352,7 @@ fn render_gui(
                 updated |= ui
                     .add_enabled(
                         settings.mes_linear.0,
-                        Slider::new(&mut settings.mes_linear.1, -1.0..=1.0),
+                        Slider::new(&mut settings.mes_linear.1, -5.0..=1.0),
                     )
                     .changed();
             });
@@ -341,7 +366,7 @@ fn render_gui(
                 updated |= ui
                     .add_enabled(
                         settings.mes_torque.0,
-                        Slider::new(&mut settings.mes_torque.1, -1.0..=1.0),
+                        Slider::new(&mut settings.mes_torque.1, -5.0..=1.0),
                     )
                     .changed();
             });
@@ -356,7 +381,7 @@ fn render_gui(
                     updated |= ui
                         .add_enabled(
                             settings.mes_x_off.0,
-                            Slider::new(&mut settings.mes_x_off.1, -3.0..=3.0),
+                            Slider::new(&mut settings.mes_x_off.1, 0.0..=70.0),
                         )
                         .changed();
                 });
@@ -370,7 +395,7 @@ fn render_gui(
                     updated |= ui
                         .add_enabled(
                             settings.mes_y_off.0,
-                            Slider::new(&mut settings.mes_y_off.1, -3.0..=3.0),
+                            Slider::new(&mut settings.mes_y_off.1, 0.0..=70.0),
                         )
                         .changed();
                 });
@@ -384,7 +409,7 @@ fn render_gui(
                     updated |= ui
                         .add_enabled(
                             settings.mes_z_off.0,
-                            Slider::new(&mut settings.mes_z_off.1, -3.0..=3.0),
+                            Slider::new(&mut settings.mes_z_off.1, 0.0..=70.0),
                         )
                         .changed();
                 });
@@ -400,7 +425,7 @@ fn render_gui(
                     updated |= ui
                         .add_enabled(
                             settings.mes_x_rot_off.0,
-                            Slider::new(&mut settings.mes_x_rot_off.1, -2.0..=2.0),
+                            Slider::new(&mut settings.mes_x_rot_off.1, 0.0..=20.0),
                         )
                         .changed();
                 });
@@ -414,7 +439,7 @@ fn render_gui(
                     updated |= ui
                         .add_enabled(
                             settings.mes_y_rot_off.0,
-                            Slider::new(&mut settings.mes_y_rot_off.1, -2.0..=2.0),
+                            Slider::new(&mut settings.mes_y_rot_off.1, 0.0..=20.0),
                         )
                         .changed();
                 });
@@ -428,7 +453,7 @@ fn render_gui(
                     updated |= ui
                         .add_enabled(
                             settings.mes_z_rot_off.0,
-                            Slider::new(&mut settings.mes_z_rot_off.1, -2.0..=2.0),
+                            Slider::new(&mut settings.mes_z_rot_off.1, 0.0..=20.0),
                         )
                         .changed();
                 });
@@ -497,7 +522,7 @@ fn render_gui(
 
                 updated |= check.changed();
                 updated |= ui
-                    .add_enabled(settings.x.0, Slider::new(&mut settings.x.1, -1.0..=1.0))
+                    .add_enabled(settings.x.0, Slider::new(&mut settings.x.1, 0.0..=1.0))
                     .changed();
             });
 
@@ -508,7 +533,7 @@ fn render_gui(
 
                 updated |= check.changed();
                 updated |= ui
-                    .add_enabled(settings.y.0, Slider::new(&mut settings.y.1, -1.0..=1.0))
+                    .add_enabled(settings.y.0, Slider::new(&mut settings.y.1, 0.0..=1.0))
                     .changed();
             });
 
@@ -519,7 +544,7 @@ fn render_gui(
 
                 updated |= check.changed();
                 updated |= ui
-                    .add_enabled(settings.z.0, Slider::new(&mut settings.z.1, -1.0..=1.0))
+                    .add_enabled(settings.z.0, Slider::new(&mut settings.z.1, 0.0..=1.0))
                     .changed();
             });
 
@@ -532,7 +557,7 @@ fn render_gui(
                 updated |= ui
                     .add_enabled(
                         settings.x_rot.0,
-                        Slider::new(&mut settings.x_rot.1, -1.0..=1.0),
+                        Slider::new(&mut settings.x_rot.1, 0.0..=1.0),
                     )
                     .changed();
             });
@@ -546,7 +571,7 @@ fn render_gui(
                 updated |= ui
                     .add_enabled(
                         settings.y_rot.0,
-                        Slider::new(&mut settings.y_rot.1, -1.0..=1.0),
+                        Slider::new(&mut settings.y_rot.1, 0.0..=1.0),
                     )
                     .changed();
             });
@@ -560,19 +585,163 @@ fn render_gui(
                 updated |= ui
                     .add_enabled(
                         settings.z_rot.0,
-                        Slider::new(&mut settings.z_rot.1, -1.0..=1.0),
+                        Slider::new(&mut settings.z_rot.1, 0.0..=1.0),
                     )
                     .changed();
             });
 
-            //             center_of_mass_loss: todo!(),
-            // center_loss: todo!(),
-            // surface_area_loss: todo!(),
-            // dimension_loss: todo!(),
-            // tube_exclusion_radius: todo!(),
-            // tube_exclusion_loss: todo!(),
-            // thruster_exclusion_radius: todo!(),
-            // thruster_exclusion_loss: todo!(),
+            ui.horizontal(|ui| {
+                let check = ui.checkbox(
+                    &mut settings.center_of_mass_loss.0,
+                    "Center of Mass offset loss",
+                );
+                let width = check.rect.width();
+                ui.allocate_space((text_width - width, 0.0).into());
+
+                updated |= check.changed();
+                updated |= ui
+                    .add_enabled(
+                        settings.center_of_mass_loss.0,
+                        Slider::new(&mut settings.center_of_mass_loss.1, -1000.0..=0.0),
+                    )
+                    .changed();
+            });
+
+            ui.horizontal(|ui| {
+                let check = ui.checkbox(&mut settings.center_loss.0, "AABB center offset loss");
+                let width = check.rect.width();
+                ui.allocate_space((text_width - width, 0.0).into());
+
+                updated |= check.changed();
+                updated |= ui
+                    .add_enabled(
+                        settings.center_loss.0,
+                        Slider::new(&mut settings.center_loss.1, -100.0..=1.0),
+                    )
+                    .changed();
+            });
+
+            ui.horizontal(|ui| {
+                let check = ui.checkbox(
+                    &mut settings.surface_area_loss.0,
+                    "Force/surface area score",
+                );
+                let width = check.rect.width();
+                ui.allocate_space((text_width - width, 0.0).into());
+
+                updated |= check.changed();
+                updated |= ui
+                    .add_enabled(
+                        settings.surface_area_loss.0,
+                        Slider::new(&mut settings.surface_area_loss.1, 0.0..=1.5),
+                    )
+                    .changed();
+            });
+
+            ui.horizontal(|ui| {
+                let check = ui.checkbox(&mut settings.dimension_loss.0, "Linear size loss");
+                let width = check.rect.width();
+                ui.allocate_space((text_width - width, 0.0).into());
+
+                updated |= check.changed();
+                updated |= ui
+                    .add_enabled(
+                        settings.dimension_loss.0,
+                        Slider::new(&mut settings.dimension_loss.1, -1000.0..=1.0),
+                    )
+                    .changed();
+            });
+
+            ui.horizontal(|ui| {
+                let check = ui.checkbox(&mut settings.tube_exclusion_radius.0, "Tube radius");
+                let width = check.rect.width();
+                ui.allocate_space((text_width - width, 0.0).into());
+
+                updated |= check.changed();
+                updated |= ui
+                    .add_enabled(
+                        settings.tube_exclusion_radius.0,
+                        Slider::new(&mut settings.tube_exclusion_radius.1, -1.0..=1.0),
+                    )
+                    .changed();
+            });
+
+            // ui.horizontal(|ui| {
+            //     let check = ui.checkbox(&mut settings.tube_exclusion_loss.0, "Tube exclusion loss");
+            //     let width = check.rect.width();
+            //     ui.allocate_space((text_width - width, 0.0).into());
+            //
+            //     updated |= check.changed();
+            //     updated |= ui
+            //         .add_enabled(
+            //             settings.tube_exclusion_loss.0,
+            //             Slider::new(&mut settings.tube_exclusion_loss.1, -100.0..=1.0),
+            //         )
+            //         .changed();
+            // });
+
+            ui.horizontal(|ui| {
+                let check =
+                    ui.checkbox(&mut settings.thruster_exclusion_radius.0, "Thruster radius");
+                let width = check.rect.width();
+                ui.allocate_space((text_width - width, 0.0).into());
+
+                updated |= check.changed();
+                updated |= ui
+                    .add_enabled(
+                        settings.thruster_exclusion_radius.0,
+                        Slider::new(&mut settings.thruster_exclusion_radius.1, -1.0..=1.0),
+                    )
+                    .changed();
+            });
+
+            ui.horizontal(|ui| {
+                let check = ui.checkbox(
+                    &mut settings.thruster_flow_exclusion_loss.0,
+                    "Thruster flow exclusion loss",
+                );
+                let width = check.rect.width();
+                ui.allocate_space((text_width - width, 0.0).into());
+
+                updated |= check.changed();
+                updated |= ui
+                    .add_enabled(
+                        settings.thruster_flow_exclusion_loss.0,
+                        Slider::new(&mut settings.thruster_flow_exclusion_loss.1, -100.0..=0.0),
+                    )
+                    .changed();
+            });
+
+            // ui.horizontal(|ui| {
+            //     let check = ui.checkbox(
+            //         &mut settings.thruster_exclusion_loss.0,
+            //         "Thruster exclusion loss",
+            //     );
+            //     let width = check.rect.width();
+            //     ui.allocate_space((text_width - width, 0.0).into());
+            //
+            //     updated |= check.changed();
+            //     updated |= ui
+            //         .add_enabled(
+            //             settings.thruster_exclusion_loss.0,
+            //             Slider::new(&mut settings.thruster_exclusion_loss.1, -100.0..=1.0),
+            //         )
+            //         .changed();
+            // });
+
+            ui.horizontal(|ui| {
+                let check = ui.checkbox(&mut settings.cardinality_loss.0, "Cardinality loss");
+                let width = check.rect.width();
+                ui.allocate_space((text_width - width, 0.0).into());
+
+                updated |= check.changed();
+                updated |= ui
+                    .add_enabled(
+                        settings.cardinality_loss.0,
+                        Slider::new(&mut settings.cardinality_loss.1, -100.0..=1.0),
+                    )
+                    .changed();
+            });
 
             if updated {
                 commands.insert_resource(ScoreSettingsRes(settings));
@@ -582,23 +751,39 @@ fn render_gui(
         });
 
         ui.collapsing("Physics Result", |ui| {
-            let physics_result = reverse::axis_maximums(&motor_conf.0, &motor_data.0, 25.0, 0.001);
+            let physics_result =
+                reverse::axis_maximums(&motor_conf.0.motor_config, &motor_data.0, 25.0, 0.001);
             let physics_result: BTreeMap<_, _> = physics_result.into_iter().collect();
             ui.label(format!("{physics_result:#.2?}"));
 
             ui.allocate_space((ui.available_width(), 0.0).into());
         });
 
-        ui.collapsing("FRT Thruster Data", |ui| {
-            let frt = motor_conf.0.motor(&X3dMotorId::FrontRightTop).unwrap();
-            ui.label(format!("{frt:#.3?}"));
+        ui.collapsing("Unscaled Score Result", |ui| {
+            ui.label(format!("{:#.02?}", motor_conf.0.score_result_unscaled));
+
+            ui.allocate_space((ui.available_width(), 0.0).into());
+        });
+
+        ui.collapsing("Scaled Score Result", |ui| {
+            ui.label(format!(
+                "Score: {:.02}",
+                motor_conf.0.score_result_scaled.score()
+            ));
+            ui.label(format!("{:#.02?}", motor_conf.0.score_result_scaled));
+
+            ui.allocate_space((ui.available_width(), 0.0).into());
+        });
+
+        ui.collapsing("Parameters", |ui| {
+            ui.label(format!("{}", motor_conf.0.parameters));
 
             ui.allocate_space((ui.available_width(), 0.0).into());
         });
 
         ui.interact(
             ui.clip_rect(),
-            "I dont know what im doing".into(),
+            "This is a unique string".into(),
             Sense::hover(),
         )
     });
@@ -623,66 +808,51 @@ fn update_motor_conf(
     motor_conf: Res<MotorConfigRes>,
     motor_data: Res<MotorDataRes>,
     score_settings: Res<ScoreSettingsRes>,
-    motors_query: Query<(Entity, &MotorMarker)>,
+    motors_query: Query<Entity, With<MotorMarker>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mesh_query: Query<(&Handle<Mesh>, &StrengthMesh)>,
     highlight_query: Query<Entity, With<CurrentConfig>>,
     mut gizmos_axis: Gizmos<AxisGizmo>,
+    mut materials_pbr: ResMut<Assets<StandardMaterial>>,
 ) {
     if motor_conf.is_changed() {
-        for (entity, motor_id) in motors_query.iter() {
-            let motor = motor_conf.0.motor(&motor_id.0).unwrap();
-
-            if motor_id.1 {
-                let transform = Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians()))
-                    * Transform::from_translation(
-                        (motor.position * 2.0 + motor.orientation / 2.0)
-                            .cast::<f32>()
-                            .into(),
-                    )
-                    .looking_to(
-                        Vec3::from(motor.orientation.cast::<f32>()),
-                        Vec3::from((-motor.position).cast::<f32>()),
-                    )
-                    * Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians()));
-
-                commands.entity(entity).insert(transform);
-            } else {
-                let transform = Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians()))
-                    * Transform::from_translation((motor.position * 2.0).cast::<f32>().into())
-                        .looking_to(
-                            Vec3::from(motor.orientation.cast::<f32>()),
-                            Vec3::from((-motor.position).cast::<f32>()),
-                        )
-                    * Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians()));
-
-                commands.entity(entity).insert(transform);
-            }
+        for entity in motors_query.iter() {
+            commands.entity(entity).despawn();
+        }
+        for (motor_id, motor) in motor_conf.0.motor_config.motors() {
+            add_motor(
+                *motor_id,
+                motor,
+                &mut commands,
+                &mut meshes,
+                &mut materials_pbr,
+            );
         }
 
         for (mesh, mesh_type) in mesh_query.iter() {
             *meshes.get_mut(mesh).unwrap() =
-                make_strength_mesh(&motor_conf.0, &motor_data.0, *mesh_type);
+                make_strength_mesh(&motor_conf.0.motor_config, &motor_data.0, *mesh_type);
         }
 
-        let transform = Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians()))
-            * Transform::from_translation(
-                (motor_conf
-                    .0
-                    .motor(&X3dMotorId::FrontRightTop)
-                    .unwrap()
-                    .orientation
-                    * optimize::evaluate(
-                        &motor_conf.0,
-                        &score_settings.0.flatten(),
-                        &motor_data.0,
-                    )
-                    .0
-                    * 0.3)
-                    .cast::<f32>()
-                    .into(),
-            );
-        commands.entity(highlight_query.single()).insert(transform);
+        // let transform = Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians()))
+        //     * Transform::from_translation(
+        //         (motor_conf
+        //             .0
+        //             .motor_config
+        //             .motor(&X3dMotorId::FrontRightTop)
+        //             .unwrap()
+        //             .orientation
+        //             * optimize::evaluate(
+        //                 &motor_conf.0.motor_config,
+        //                 &score_settings.0.flatten(),
+        //                 &motor_data.0,
+        //             )
+        //             .0
+        //             * 0.3)
+        //             .cast::<f32>()
+        //             .into(),
+        //     );
+        // commands.entity(highlight_query.single()).insert(transform);
     }
 
     gizmos_axis.rect(
@@ -728,36 +898,36 @@ fn update_motor_conf(
 }
 
 fn add_motor_conf(
-    motor_conf: &MotorConfig<X3dMotorId, FloatType>,
+    motor_conf: &MotorConfig<ErasedMotorId, FloatType>,
     motor_data: &Res<MotorDataRes>,
 
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
     materials_pbr: &mut ResMut<Assets<StandardMaterial>>,
 ) {
-    commands.spawn((
-        PbrBundle {
-            mesh: meshes.add(Cuboid::new(
-                WIDTH as f32 * 2.0,
-                LENGTH as f32 * 2.0,
-                HEIGHT as f32 * 2.0,
-            )),
-            material: materials_pbr.add(Color::srgb(0.8, 0.7, 0.6)),
-            transform: Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians())),
-            ..default()
-        },
-        RenderLayers::layer(0),
-    ));
+    // commands.spawn((
+    //     PbrBundle {
+    //         mesh: meshes.add(Cuboid::new(
+    //             WIDTH as f32 * 2.0,
+    //             LENGTH as f32 * 2.0,
+    //             HEIGHT as f32 * 2.0,
+    //         )),
+    //         material: materials_pbr.add(Color::srgb(0.8, 0.7, 0.6)),
+    //         transform: Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians())),
+    //         ..default()
+    //     },
+    //     RenderLayers::layer(0),
+    // ));
 
-    commands.spawn((
-        PbrBundle {
-            mesh: meshes.add(Sphere::new(0.05)),
-            material: materials_pbr.add(Color::from(color::palettes::css::GRAY)),
-            ..default()
-        },
-        CurrentConfig,
-        RenderLayers::layer(3),
-    ));
+    // commands.spawn((
+    //     PbrBundle {
+    //         mesh: meshes.add(Sphere::new(0.05)),
+    //         material: materials_pbr.add(Color::from(color::palettes::css::GRAY)),
+    //         ..default()
+    //     },
+    //     CurrentConfig,
+    //     RenderLayers::layer(3),
+    // ));
 
     commands.spawn((
         PbrBundle {
@@ -789,18 +959,38 @@ fn add_motor_conf(
         RenderLayers::layer(2),
     ));
 
-    for (motor_id, _) in motor_conf.motors() {
-        add_motor(*motor_id, commands, meshes, materials_pbr);
-    }
+    // for (motor_id, _) in motor_conf.motors() {
+    //     add_motor(*motor_id, commands, meshes, materials_pbr);
+    // }
 }
 
 fn add_motor(
-    motor_id: X3dMotorId,
+    motor_id: ErasedMotorId,
+    motor: &Motor<FloatType>,
 
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
     materials_pbr: &mut ResMut<Assets<StandardMaterial>>,
 ) {
+    let transform_normal = Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians()))
+        * Transform::from_translation(
+            (motor.position * 2.0 + motor.orientation / 2.0)
+                .cast::<f32>()
+                .into(),
+        )
+        .looking_to(
+            Vec3::from(motor.orientation.cast::<f32>()),
+            Vec3::from((-motor.position).cast::<f32>()),
+        )
+        * Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians()));
+
+    let transform_thruster = Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians()))
+        * Transform::from_translation((motor.position * 2.0).cast::<f32>().into()).looking_to(
+            Vec3::from(motor.orientation.cast::<f32>()),
+            Vec3::from((-motor.position).cast::<f32>()),
+        )
+        * Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians()));
+
     commands.spawn((
         PbrBundle {
             mesh: meshes.add(Cylinder {
@@ -808,6 +998,7 @@ fn add_motor(
                 half_height: 1.0 / 2.0,
             }),
             material: materials_pbr.add(Color::from(color::palettes::css::GREEN)),
+            transform: transform_normal,
             ..default()
         },
         MotorMarker(motor_id, true),
@@ -821,6 +1012,8 @@ fn add_motor(
                 half_height: 0.15 / 2.0,
             }),
             material: materials_pbr.add(Color::from(color::palettes::css::BLACK)),
+            transform: transform_thruster,
+
             ..default()
         },
         MotorMarker(motor_id, false),
@@ -846,11 +1039,11 @@ fn set_camera_viewports(
 }
 
 fn make_strength_mesh(
-    motor_config: &MotorConfig<X3dMotorId, FloatType>,
+    motor_config: &MotorConfig<ErasedMotorId, FloatType>,
     motor_data: &MotorData,
     mesh_type: StrengthMesh,
 ) -> Mesh {
-    let generated = IcoSphere::new(10, |point| {
+    let generated = IcoSphere::new(5, |point| {
         let movement = match mesh_type {
             StrengthMesh::Force => Movement {
                 force: Vector3::from(point.normalize()).cast::<FloatType>(),
@@ -866,6 +1059,7 @@ fn make_strength_mesh(
         let motor_cmds = reverse::forces_to_cmds(forces, motor_config, motor_data);
         let ratio =
             reverse::binary_search_force_ratio(&motor_cmds, motor_config, motor_data, 25.0, 0.001);
+        // let ratio = 1.0;
 
         let type_ratio = match mesh_type {
             StrengthMesh::Force => 1.0,
@@ -883,39 +1077,39 @@ fn make_strength_mesh(
     iso_sphere_to_mesh(generated)
 }
 
-fn make_heuristic_meshes(score_settings: &ScoreSettings, motor_data: &MotorData) -> (Mesh, Mesh) {
-    let positive = IcoSphere::new(20, |point| {
-        let motor_config = MotorConfig::<X3dMotorId, FloatType>::new(
-            Motor {
-                position: vector![WIDTH, LENGTH, HEIGHT] / 2.0,
-                orientation: Vector3::from(point.normalize()).cast::<FloatType>(),
-                direction: Direction::Clockwise,
-            },
-            vector![0.0, 0.0, 0.0],
-        );
-
-        let score = optimize::evaluate(&motor_config, score_settings, motor_data).0;
-
-        score.clamp(0.0, 10.0) as f32 * 0.3
-    });
-
-    let negative = IcoSphere::new(20, |point| {
-        let motor_config = MotorConfig::<X3dMotorId, FloatType>::new(
-            Motor {
-                position: vector![WIDTH, LENGTH, HEIGHT] / 2.0,
-                orientation: Vector3::from(point.normalize()).cast::<FloatType>(),
-                direction: Direction::Clockwise,
-            },
-            vector![0.0, 0.0, 0.0],
-        );
-
-        let score = optimize::evaluate(&motor_config, score_settings, motor_data).0;
-
-        score.clamp(-10.0, 0.0).abs() as f32 * 0.3
-    });
-
-    (iso_sphere_to_mesh(positive), iso_sphere_to_mesh(negative))
-}
+// fn make_heuristic_meshes(score_settings: &ScoreSettings, motor_data: &MotorData) -> (Mesh, Mesh) {
+//     let positive = IcoSphere::new(20, |point| {
+//         let motor_config = MotorConfig::<X3dMotorId, FloatType>::new(
+//             Motor {
+//                 position: vector![WIDTH, LENGTH, HEIGHT] / 2.0,
+//                 orientation: Vector3::from(point.normalize()).cast::<FloatType>(),
+//                 direction: Direction::Clockwise,
+//             },
+//             vector![0.0, 0.0, 0.0],
+//         );
+//
+//         let score = optimize::evaluate(&motor_config, score_settings, motor_data).0;
+//
+//         score.clamp(0.0, 10.0) as f32 * 0.3
+//     });
+//
+//     let negative = IcoSphere::new(20, |point| {
+//         let motor_config = MotorConfig::<X3dMotorId, FloatType>::new(
+//             Motor {
+//                 position: vector![WIDTH, LENGTH, HEIGHT] / 2.0,
+//                 orientation: Vector3::from(point.normalize()).cast::<FloatType>(),
+//                 direction: Direction::Clockwise,
+//             },
+//             vector![0.0, 0.0, 0.0],
+//         );
+//
+//         let score = optimize::evaluate(&motor_config, score_settings, motor_data).0;
+//
+//         score.clamp(-10.0, 0.0).abs() as f32 * 0.3
+//     });
+//
+//     (iso_sphere_to_mesh(positive), iso_sphere_to_mesh(negative))
+// }
 
 fn iso_sphere_to_mesh(obj: IcoSphere<f32>) -> Mesh {
     let raw_points = obj.raw_points();
@@ -973,42 +1167,48 @@ fn sync_cameras(
 }
 
 fn handle_heuristic_change(
-    mut commands: Commands,
+    // mut commands: Commands,
     score_settings: Res<ScoreSettingsRes>,
-    motor_data: Res<MotorDataRes>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    query: Query<(&Handle<Mesh>, &HeuristicMesh)>,
-    mut materials_pbr: ResMut<Assets<StandardMaterial>>,
-    points: Query<Entity, With<AccentPoint>>,
+    mut motor_conf: ResMut<MotorConfigRes>,
+    // motor_data: Res<MotorDataRes>,
+    // mut meshes: ResMut<Assets<Mesh>>,
+    // query: Query<(&Handle<Mesh>, &HeuristicMesh)>,
+    // mut materials_pbr: ResMut<Assets<StandardMaterial>>,
+    // points: Query<Entity, With<AccentPoint>>,
+    mut optimizer: ResMut<OptimizerArenaRes>,
 ) {
     if score_settings.is_changed() {
-        let (positive, negative) =
-            make_heuristic_meshes(&score_settings.0.flatten(), &motor_data.0);
+        info!("Heuristic changed");
+        // let (positive, negative) =
+        //     make_heuristic_meshes(&score_settings.0.flatten(), &motor_data.0);
+        //
+        // for (mesh, mesh_type) in query.iter() {
+        //     match mesh_type {
+        //         HeuristicMesh::Positive => *meshes.get_mut(mesh).unwrap() = positive.clone(),
+        //         HeuristicMesh::Negative => *meshes.get_mut(mesh).unwrap() = negative.clone(),
+        //     }
+        // }
+        //
+        // for point in &points {
+        //     commands.entity(point).despawn();
+        // }
+        //
+        // let sphere_points = initial_points(100);
+        // // let sphere_points = vec![vector![0.5, 0.3, -0.6].normalize()];
+        // for point in sphere_points {
+        //     commands.spawn((
+        //         PbrBundle {
+        //             mesh: meshes.add(Sphere::new(0.01)),
+        //             material: materials_pbr.add(Color::WHITE),
+        //             ..default()
+        //         },
+        //         AccentPoint(point, false, 0.0, Ascent::default(), 0),
+        //         RenderLayers::layer(3),
+        //     ));
+        // }
 
-        for (mesh, mesh_type) in query.iter() {
-            match mesh_type {
-                HeuristicMesh::Positive => *meshes.get_mut(mesh).unwrap() = positive.clone(),
-                HeuristicMesh::Negative => *meshes.get_mut(mesh).unwrap() = negative.clone(),
-            }
-        }
-
-        for point in &points {
-            commands.entity(point).despawn();
-        }
-
-        let sphere_points = initial_points(100);
-        // let sphere_points = vec![vector![0.5, 0.3, -0.6].normalize()];
-        for point in sphere_points {
-            commands.spawn((
-                PbrBundle {
-                    mesh: meshes.add(Sphere::new(0.01)),
-                    material: materials_pbr.add(Color::WHITE),
-                    ..default()
-                },
-                AccentPoint(point, false, 0.0, Ascent::default(), 0),
-                RenderLayers::layer(3),
-            ));
-        }
+        optimizer.0.reset(500, score_settings.0.flatten());
+        motor_conf.0.score = FloatType::NEG_INFINITY;
     }
 }
 
@@ -1016,59 +1216,60 @@ fn step_accent_points(
     mut commands: Commands,
     motor_conf: Res<MotorConfigRes>,
     motor_data: Res<MotorDataRes>,
-    mut points: Query<(Entity, &mut AccentPoint)>,
+    // mut points: Query<(Entity, &mut AccentPoint)>,
     score_settings: Res<ScoreSettingsRes>,
+    mut optimizer: ResMut<OptimizerArenaRes>,
 ) {
-    points.par_iter_mut().for_each(|(_, mut point)| {
-        if !point.1 {
-            let result = gradient_ascent(&point.0, &score_settings.0.flatten(), &motor_data.0);
+    // points.par_iter_mut().for_each(|(_, mut point)| {
+    //     if !point.1 {
+    //         let result = gradient_ascent(&point.0, &score_settings.0.flatten(), &motor_data.0);
+    //
+    //         if point.3.gradient.dot(&result.gradient) < 0.0 {
+    //             point.4 += 1;
+    //         }
+    //
+    //         point.0 = result.new_point;
+    //         point.1 = point.4 >= 2
+    //             && result.gradient.norm_squared() < CRITICAL_POINT_EPSILON * CRITICAL_POINT_EPSILON;
+    //         point.2 = result.old_score as f32;
+    //         point.3 = result;
+    //     }
+    // });
 
-            if point.3.gradient.dot(&result.gradient) < 0.0 {
-                point.4 += 1;
-            }
+    let best = optimizer.0.step(&motor_data.0).next();
+    if let Some(best) = best {
+        let current_score = motor_conf.0.score;
 
-            point.0 = result.new_point;
-            point.1 = point.4 >= 2
-                && result.gradient.norm_squared() < CRITICAL_POINT_EPSILON * CRITICAL_POINT_EPSILON;
-            point.2 = result.old_score as f32;
-            point.3 = result;
-        }
-    });
-
-    let mut best: Option<(MotorConfig<X3dMotorId, FloatType>, f32)> = None;
-
-    for (entity, point) in points.iter() {
-        if !point.1 {
-            let transform = Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians()))
-                * Transform::from_translation(
-                    Vec3::from(point.0.normalize().cast::<f32>()) * point.2 * 0.3,
-                );
-
-            commands.entity(entity).try_insert(transform);
-        }
-
-        if Some(point.2) > best.as_ref().map(|it| it.1) {
-            let config = MotorConfig::<X3dMotorId, FloatType>::new(
-                Motor {
-                    position: vector![WIDTH, LENGTH, HEIGHT] / 2.0,
-                    orientation: point.0.normalize(),
-                    direction: Direction::Clockwise,
-                },
-                vector![0.0, 0.0, 0.0],
-            );
-
-            best = Some((config, point.2));
-        }
-    }
-
-    if let Some((best, best_score)) = best {
-        let current_score =
-            optimize::evaluate(&motor_conf.0, &score_settings.0.flatten(), &motor_data.0).0 as f32;
-
-        if best_score - current_score > 0.005 {
+        if best.score - current_score > 0.001 {
             commands.insert_resource(MotorConfigRes(best));
         }
     }
+
+    // let mut best: Option<(MotorConfig<X3dMotorId, FloatType>, f32)> = None;
+
+    // for (entity, point) in points.iter() {
+    //     if !point.1 {
+    //         let transform = Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians()))
+    //             * Transform::from_translation(
+    //                 Vec3::from(point.0.normalize().cast::<f32>()) * point.2 * 0.3,
+    //             );
+    //
+    //         commands.entity(entity).try_insert(transform);
+    //     }
+    //
+    //     if Some(point.2) > best.as_ref().map(|it| it.1) {
+    //         let config = MotorConfig::<X3dMotorId, FloatType>::new(
+    //             Motor {
+    //                 position: vector![WIDTH, LENGTH, HEIGHT] / 2.0,
+    //                 orientation: point.0.normalize(),
+    //                 direction: Direction::Clockwise,
+    //             },
+    //             vector![0.0, 0.0, 0.0],
+    //         );
+    //
+    //         best = Some((config, point.2));
+    //     }
+    // }
 }
 
 #[derive(Clone)]
@@ -1105,6 +1306,8 @@ pub struct ToggleableScoreSettings {
     pub tube_exclusion_loss: (bool, FloatType),
     pub thruster_exclusion_radius: (bool, FloatType),
     pub thruster_exclusion_loss: (bool, FloatType),
+    pub cardinality_loss: (bool, FloatType),
+    pub thruster_flow_exclusion_loss: (bool, FloatType),
 }
 
 impl ToggleableScoreSettings {
@@ -1187,7 +1390,7 @@ impl ToggleableScoreSettings {
             } else {
                 0.0
             },
-            surface_area_loss: if self.surface_area_loss.0 {
+            surface_area_score: if self.surface_area_loss.0 {
                 self.surface_area_loss.1
             } else {
                 0.0
@@ -1217,6 +1420,16 @@ impl ToggleableScoreSettings {
             } else {
                 0.0
             },
+            cardinality_loss: if self.cardinality_loss.0 {
+                self.cardinality_loss.1
+            } else {
+                0.0
+            },
+            thruster_flow_exclusion_loss: if self.thruster_flow_exclusion_loss.0 {
+                self.thruster_flow_exclusion_loss.1
+            } else {
+                0.0
+            },
         }
     }
 }
@@ -1230,7 +1443,7 @@ impl Default for ToggleableScoreSettings {
             mes_x_off: (true, base.mes_x_off),
             mes_y_off: (true, base.mes_y_off),
             mes_z_off: (true, base.mes_z_off),
-            mes_torque: (true, base.mes_torque),
+            mes_torque: (false, base.mes_torque),
             mes_x_rot_off: (true, base.mes_x_rot_off),
             mes_y_rot_off: (true, base.mes_y_rot_off),
             mes_z_rot_off: (true, base.mes_z_rot_off),
@@ -1238,20 +1451,22 @@ impl Default for ToggleableScoreSettings {
             avg_torque: (true, base.avg_torque),
             min_linear: (true, base.min_linear),
             min_torque: (true, base.min_torque),
-            x: (true, base.x),
-            y: (true, base.y),
-            z: (true, base.z),
-            x_rot: (true, base.x_rot),
-            y_rot: (true, base.y_rot),
-            z_rot: (true, base.z_rot),
+            x: (false, base.x),
+            y: (false, base.y),
+            z: (false, base.z),
+            x_rot: (false, base.x_rot),
+            y_rot: (false, base.y_rot),
+            z_rot: (false, base.z_rot),
             center_of_mass_loss: (true, base.center_of_mass_loss),
             center_loss: (true, base.center_loss),
-            surface_area_loss: (true, base.surface_area_loss),
+            surface_area_loss: (true, base.surface_area_score),
             dimension_loss: (true, base.dimension_loss),
             tube_exclusion_radius: (true, base.tube_exclusion_radius),
             tube_exclusion_loss: (true, base.tube_exclusion_loss),
             thruster_exclusion_radius: (true, base.thruster_exclusion_radius),
             thruster_exclusion_loss: (true, base.thruster_exclusion_loss),
+            cardinality_loss: (true, base.cardinality_loss),
+            thruster_flow_exclusion_loss: (true, base.thruster_flow_exclusion_loss),
         }
     }
 }
@@ -1281,7 +1496,7 @@ fn auto_generate_constraints(
     mut auto_generate: ResMut<AutoGenerate>,
     mut score_settings: ResMut<ScoreSettingsRes>,
     time: Res<Time>,
-    points: Query<(Entity, &AccentPoint)>,
+    // points: Query<(Entity, &AccentPoint)>,
     mut cameras: Query<&mut PanOrbitCamera>,
 ) {
     match *auto_generate {
@@ -1325,6 +1540,8 @@ fn auto_generate_constraints(
                 tube_exclusion_loss: (false, rand::random::<FloatType>() * 2.0 - 1.0),
                 thruster_exclusion_radius: (false, rand::random::<FloatType>() * 2.0 - 1.0),
                 thruster_exclusion_loss: (false, rand::random::<FloatType>() * 2.0 - 1.0),
+                cardinality_loss: (false, rand::random::<FloatType>() * 2.0 - 1.0),
+                thruster_flow_exclusion_loss: (false, rand::random::<FloatType>() * 2.0 - 1.0),
             };
 
             *auto_generate = AutoGenerate::Solve(time.elapsed());
