@@ -905,19 +905,15 @@ fn add_motor_conf(
     meshes: &mut ResMut<Assets<Mesh>>,
     materials_pbr: &mut ResMut<Assets<StandardMaterial>>,
 ) {
-    // commands.spawn((
-    //     PbrBundle {
-    //         mesh: meshes.add(Cuboid::new(
-    //             WIDTH as f32 * 2.0,
-    //             LENGTH as f32 * 2.0,
-    //             HEIGHT as f32 * 2.0,
-    //         )),
-    //         material: materials_pbr.add(Color::srgb(0.8, 0.7, 0.6)),
-    //         transform: Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians())),
-    //         ..default()
-    //     },
-    //     RenderLayers::layer(0),
-    // ));
+    commands.spawn((
+        PbrBundle {
+            mesh: meshes.add(Cylinder::new(0.1, 0.76)),
+            material: materials_pbr.add(Color::srgb(0.8, 0.7, 0.6)),
+            transform: Transform::from_rotation(Quat::from_rotation_x(90f32.to_radians())),
+            ..default()
+        },
+        RenderLayers::layer(0),
+    ));
 
     // commands.spawn((
     //     PbrBundle {
@@ -1008,8 +1004,8 @@ fn add_motor(
     commands.spawn((
         PbrBundle {
             mesh: meshes.add(Cylinder {
-                radius: 0.15,
-                half_height: 0.15 / 2.0,
+                radius: 0.1,
+                half_height: 0.05,
             }),
             material: materials_pbr.add(Color::from(color::palettes::css::BLACK)),
             transform: transform_thruster,
