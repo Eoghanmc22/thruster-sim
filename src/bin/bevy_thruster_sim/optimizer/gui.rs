@@ -501,13 +501,7 @@ pub fn render_gui(
     });
 
     let enable_cameras = if let Some(response) = response {
-        // if let Some(response) = response.inner {
-        //     !response.hovered()
-        // } else {
-        //     true
-        // }
-
-        !response.response.hovered()
+        !response.response.contains_pointer()
     } else {
         true
     };
