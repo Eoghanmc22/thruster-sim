@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use bevy::prelude::*;
 use bevy_egui::{
-    egui::{self, Sense, Slider},
+    egui::{self, Slider},
     EguiContexts,
 };
 use bevy_panorbit_camera::PanOrbitCamera;
@@ -10,7 +10,7 @@ use motor_math::solve::reverse;
 
 use crate::{motor_config::MotorConfigRes, MotorDataRes};
 
-use super::ScoreSettingsRes;
+use super::{ScoreSettingsRes, ShownConfig, TopConfigs};
 
 pub fn render_gui(
     mut commands: Commands,
@@ -19,9 +19,28 @@ pub fn render_gui(
     motor_data: Res<MotorDataRes>,
     solver: Res<ScoreSettingsRes>,
     mut cameras: Query<&mut PanOrbitCamera>,
+    mut shown_config: ResMut<ShownConfig>,
+    best: Res<TopConfigs>,
 ) {
     let response = egui::Window::new("Motor Config").show(contexts.ctx_mut(), |ui| {
         ui.set_width(250.0);
+
+        ui.collapsing("Instances", |ui| {
+            let mut shown = *shown_config;
+
+            ui.selectable_value(&mut shown, ShownConfig::Best, "Always Best");
+            for config in &best.configs {
+                ui.selectable_value(
+                    &mut shown,
+                    ShownConfig::Index(config.idx),
+                    format!("{}, {:.02}", config.idx, config.score),
+                );
+            }
+
+            if shown != *shown_config {
+                *shown_config = shown;
+            }
+        });
 
         ui.collapsing("Optimization Goals", |ui| {
             let mut settings = solver.0.clone();

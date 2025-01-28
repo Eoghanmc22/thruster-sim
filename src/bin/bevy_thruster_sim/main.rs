@@ -19,8 +19,8 @@ use motor_math::{
     Direction, FloatType, Motor, MotorConfig,
 };
 use nalgebra::{vector, DMatrix};
-use optimizer::gui::render_gui;
 use optimizer::settings::ToggleableScoreSettings;
+use optimizer::{gui::render_gui, ShownConfig, TopConfigs};
 use optimizer::{handle_heuristic_change, step_accent_points, OptimizerArenaRes, ScoreSettingsRes};
 use thruster_sim::optimize::symetrical::SymerticalOptimization;
 use thruster_sim::optimize::{AsyncOptimizationArena, OptimizationOutput};
@@ -75,6 +75,8 @@ fn main() {
         ))))
         .insert_resource(MotorDataRes(motor_data))
         .insert_resource(ClearColor(Color::WHITE))
+        .insert_resource(ShownConfig::Best)
+        .insert_resource(TopConfigs { configs: vec![] })
         .add_systems(Startup, setup)
         .add_systems(
             Update,
@@ -118,6 +120,7 @@ fn setup(
         &mut materials_pbr,
     );
     commands.insert_resource(MotorConfigRes(OptimizationOutput {
+        idx: 0,
         motor_config: motor_conf.clone(),
         score: 0.0,
         parameters: DMatrix::default(),

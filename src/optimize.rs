@@ -396,9 +396,14 @@ pub trait OptimizationArena {
         &'a mut self,
         motor_data: &MotorData,
     ) -> Box<dyn Iterator<Item = OptimizationOutput> + 'a>;
+
+    fn lookup_index(&self, idx: usize) -> Option<OptimizationOutput>;
 }
 
+#[derive(Debug, Clone)]
 pub struct OptimizationOutput {
+    pub idx: usize,
+
     pub score: FloatType,
     pub motor_config: MotorConfig<ErasedMotorId, FloatType>,
     pub parameters: DMatrix<FloatType>,
@@ -410,6 +415,7 @@ pub struct SyncOptimizationArena<Config: OptimizableConfig> {
     config: Config,
     heuristic: ScoreSettings,
     points: Vec<(
+        usize,
         FloatType,
         OptimizationState<Config::Point<FloatType>>,
         ScoreResult<FloatType, Unscaled>,
@@ -452,7 +458,8 @@ where
         self.points = self
             .config
             .initial_points(point_count)
-            .map(|it| (FloatType::NEG_INFINITY, it, Default::default()))
+            .enumerate()
+            .map(|(idx, it)| (idx, FloatType::NEG_INFINITY, it, Default::default()))
             .collect_vec();
         self.heuristic = heuristic;
     }
@@ -461,7 +468,7 @@ where
         &'a mut self,
         motor_data: &MotorData,
     ) -> Box<dyn Iterator<Item = OptimizationOutput> + 'a> {
-        for (score, point, breakdown) in &mut self.points {
+        for (_, score, point, breakdown) in &mut self.points {
             if !point.done {
                 let ascent = adam_optimizer(
                     point,
@@ -481,12 +488,13 @@ where
             }
         }
 
-        self.points.sort_by(|a, b| FloatType::total_cmp(&a.0, &b.0));
+        self.points.sort_by(|a, b| FloatType::total_cmp(&a.1, &b.1));
 
         Box::new(
             self.points
                 .iter()
-                .map(|(score, point, breakdown)| OptimizationOutput {
+                .map(|(idx, score, point, breakdown)| OptimizationOutput {
+                    idx: *idx,
                     score: *score,
                     motor_config: self.config.motor_config(point.point).erase_lossy(),
                     parameters: DMatrix::from_column_slice(DIM1, DIM2, point.point.as_slice()),
@@ -495,12 +503,27 @@ where
                 }),
         )
     }
+
+    fn lookup_index(&self, idx: usize) -> Option<OptimizationOutput> {
+        self.points
+            .iter()
+            .find(|(cur_idx, ..)| *cur_idx == idx)
+            .map(|(idx, score, point, breakdown)| OptimizationOutput {
+                idx: *idx,
+                score: *score,
+                motor_config: self.config.motor_config(point.point).erase_lossy(),
+                parameters: DMatrix::from_column_slice(DIM1, DIM2, point.point.as_slice()),
+                score_result_unscaled: breakdown.clone(),
+                score_result_scaled: breakdown.scale(&self.heuristic),
+            })
+    }
 }
 
 pub struct AsyncOptimizationArena<Config: OptimizableConfig> {
     config: Config,
     heuristic: ScoreSettings,
     points: Vec<(
+        usize,
         FloatType,
         OptimizationState<Config::Point<FloatType>>,
         ScoreResult<FloatType, Unscaled>,
@@ -545,7 +568,8 @@ where
         self.points = self
             .config
             .initial_points(point_count)
-            .map(|it| (FloatType::NEG_INFINITY, it, Default::default()))
+            .enumerate()
+            .map(|(idx, it)| (idx, FloatType::NEG_INFINITY, it, Default::default()))
             .collect_vec();
         self.heuristic = heuristic;
     }
@@ -556,7 +580,7 @@ where
     ) -> Box<dyn Iterator<Item = OptimizationOutput> + 'a> {
         self.points
             .par_iter_mut()
-            .for_each(|(score, point, breakdown)| {
+            .for_each(|(_, score, point, breakdown)| {
                 if !point.done {
                     let ascent = adam_optimizer(
                         point,
@@ -578,12 +602,13 @@ where
             });
 
         self.points
-            .sort_by(|a, b| FloatType::total_cmp(&a.0, &b.0).reverse());
+            .sort_by(|a, b| FloatType::total_cmp(&a.1, &b.1).reverse());
 
         Box::new(
             self.points
                 .iter()
-                .map(|(score, point, breakdown)| OptimizationOutput {
+                .map(|(idx, score, point, breakdown)| OptimizationOutput {
+                    idx: *idx,
                     score: *score,
                     motor_config: self.config.motor_config(point.point).erase_lossy(),
                     parameters: DMatrix::from_column_slice(DIM1, DIM2, point.point.as_slice()),
@@ -591,5 +616,19 @@ where
                     score_result_scaled: breakdown.scale(&self.heuristic),
                 }),
         )
+    }
+
+    fn lookup_index(&self, idx: usize) -> Option<OptimizationOutput> {
+        self.points
+            .iter()
+            .find(|(cur_idx, ..)| *cur_idx == idx)
+            .map(|(idx, score, point, breakdown)| OptimizationOutput {
+                idx: *idx,
+                score: *score,
+                motor_config: self.config.motor_config(point.point).erase_lossy(),
+                parameters: DMatrix::from_column_slice(DIM1, DIM2, point.point.as_slice()),
+                score_result_unscaled: breakdown.clone(),
+                score_result_scaled: breakdown.scale(&self.heuristic),
+            })
     }
 }
