@@ -19,9 +19,9 @@ use motor_math::{
     Direction, FloatType, Motor, MotorConfig,
 };
 use nalgebra::{vector, DMatrix};
-use optimizer::settings::ToggleableScoreSettings;
-use optimizer::{gui::render_gui, ShownConfig, TopConfigs};
+use optimizer::{gui::render_gui, handle_reset, ShownConfig, TopConfigs};
 use optimizer::{handle_heuristic_change, step_accent_points, OptimizerArenaRes, ScoreSettingsRes};
+use optimizer::{settings::ToggleableScoreSettings, ResetEvent};
 use thruster_sim::optimize::symetrical::SymerticalOptimization;
 use thruster_sim::optimize::{AsyncOptimizationArena, OptimizationOutput};
 use thruster_sim::{HEIGHT, LENGTH, WIDTH};
@@ -77,6 +77,7 @@ fn main() {
         .insert_resource(ClearColor(Color::WHITE))
         .insert_resource(ShownConfig::Best)
         .insert_resource(TopConfigs { configs: vec![] })
+        .add_event::<ResetEvent>()
         .add_systems(Startup, setup)
         .add_systems(
             Update,
@@ -86,6 +87,7 @@ fn main() {
                 set_camera_viewports,
                 sync_cameras,
                 handle_heuristic_change,
+                handle_reset,
                 step_accent_points,
                 // screenshot_on_tab,
                 // auto_generate_constraints.before(sync_cameras),
@@ -238,4 +240,8 @@ fn setup(
     //     HeuristicMesh::Negative,
     //     RenderLayers::layer(3),
     // ));
+
+    commands.add(|world: &mut World| {
+        world.send_event(ResetEvent);
+    });
 }

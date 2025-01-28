@@ -42,16 +42,16 @@ pub fn step_accent_points(
     match *shown_config {
         ShownConfig::Best => {
             if let Some(best) = best.configs.first() {
-                if shown_config.is_changed() || best.score - current_score > 0.001 {
-                    commands.insert_resource(MotorConfigRes(best.clone()));
-                }
+                // if shown_config.is_changed() || best.score - current_score > 0.001 {
+                commands.insert_resource(MotorConfigRes(best.clone()));
+                // }
             }
         }
         ShownConfig::Index(idx) => {
             if let Some(idx) = optimizer.0.lookup_index(idx) {
-                if shown_config.is_changed() || idx.score - current_score > 0.001 {
-                    commands.insert_resource(MotorConfigRes(idx));
-                }
+                // if shown_config.is_changed() || idx.score - current_score > 0.001 {
+                commands.insert_resource(MotorConfigRes(idx));
+                // }
             }
         }
     }
@@ -63,6 +63,24 @@ pub fn handle_heuristic_change(
     mut optimizer: ResMut<OptimizerArenaRes>,
 ) {
     if score_settings.is_changed() {
+        info!("Heuristic changed");
+
+        optimizer.0.set_heuristic(score_settings.0.flatten());
+        motor_conf.0.score = FloatType::NEG_INFINITY;
+    }
+}
+
+#[derive(Event)]
+pub struct ResetEvent;
+
+pub fn handle_reset(
+    score_settings: Res<ScoreSettingsRes>,
+    mut motor_conf: ResMut<MotorConfigRes>,
+    mut optimizer: ResMut<OptimizerArenaRes>,
+    mut reset_event: EventReader<ResetEvent>,
+) {
+    if !reset_event.is_empty() {
+        reset_event.clear();
         info!("Heuristic changed");
 
         optimizer.0.reset(100, score_settings.0.flatten());

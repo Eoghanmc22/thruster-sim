@@ -69,7 +69,7 @@ impl Default for ScoreSettings {
             center_of_mass_loss: -500.0,
             center_loss: 0.0,
             surface_area_score: 0.0,
-            dimension_loss: -200.0,
+            dimension_loss: -1000.0,
             tube_exclusion_radius: 0.08,
             thruster_exclusion_radius: 0.08,
             tube_exclusion_loss: -500.0,

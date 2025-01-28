@@ -10,7 +10,7 @@ use motor_math::solve::reverse;
 
 use crate::{motor_config::MotorConfigRes, MotorDataRes};
 
-use super::{ScoreSettingsRes, ShownConfig, TopConfigs};
+use super::{ResetEvent, ScoreSettingsRes, ShownConfig, TopConfigs};
 
 pub fn render_gui(
     mut commands: Commands,
@@ -48,6 +48,12 @@ pub fn render_gui(
             let mut updated = false;
 
             let text_width = 200.0;
+
+            if ui.button("Reset").clicked() {
+                commands.add(|world: &mut World| {
+                    world.send_event(ResetEvent);
+                });
+            }
 
             ui.horizontal(|ui| {
                 let check = ui.checkbox(&mut settings.mes_linear.0, "MES Linear");
