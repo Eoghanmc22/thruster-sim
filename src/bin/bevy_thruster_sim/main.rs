@@ -19,7 +19,7 @@ use motor_math::{
     Direction, FloatType, Motor, MotorConfig,
 };
 use nalgebra::{vector, DMatrix};
-use optimizer::{gui::render_gui, handle_reset, ShownConfig, TopConfigs};
+use optimizer::{gui::render_gui, handle_reset, OptimizerStatus, ShownConfig, TopConfigs};
 use optimizer::{handle_heuristic_change, step_accent_points, OptimizerArenaRes, ScoreSettingsRes};
 use optimizer::{settings::ToggleableScoreSettings, ResetEvent};
 use thruster_sim::optimize::symetrical::SymerticalOptimization;
@@ -76,6 +76,7 @@ fn main() {
         .insert_resource(MotorDataRes(motor_data))
         .insert_resource(ClearColor(Color::WHITE))
         .insert_resource(ShownConfig::Best)
+        .insert_resource(OptimizerStatus::Running)
         .insert_resource(TopConfigs { configs: vec![] })
         .add_event::<ResetEvent>()
         .add_systems(Startup, setup)

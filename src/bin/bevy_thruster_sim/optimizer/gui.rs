@@ -10,7 +10,7 @@ use motor_math::solve::reverse;
 
 use crate::{motor_config::MotorConfigRes, MotorDataRes};
 
-use super::{ResetEvent, ScoreSettingsRes, ShownConfig, TopConfigs};
+use super::{OptimizerStatus, ResetEvent, ScoreSettingsRes, ShownConfig, TopConfigs};
 
 pub fn render_gui(
     mut commands: Commands,
@@ -21,12 +21,26 @@ pub fn render_gui(
     mut cameras: Query<&mut PanOrbitCamera>,
     mut shown_config: ResMut<ShownConfig>,
     best: Res<TopConfigs>,
+    mut status: ResMut<OptimizerStatus>,
 ) {
     let response = egui::Window::new("Motor Config").show(contexts.ctx_mut(), |ui| {
         ui.set_width(250.0);
 
         ui.collapsing("Instances", |ui| {
             let mut shown = *shown_config;
+
+            match *status {
+                OptimizerStatus::Running => {
+                    if ui.button("Pause").clicked() {
+                        *status = OptimizerStatus::Paused;
+                    }
+                }
+                OptimizerStatus::Paused => {
+                    if ui.button("Resume").clicked() {
+                        *status = OptimizerStatus::Running;
+                    }
+                }
+            }
 
             ui.selectable_value(&mut shown, ShownConfig::Best, "Always Best");
             for config in &best.configs {
@@ -492,12 +506,6 @@ pub fn render_gui(
 
             ui.allocate_space((ui.available_width(), 0.0).into());
         });
-        //
-        // ui.interact(
-        //     ui.clip_rect(),
-        //     "This is a unique string".into(),
-        //     Sense::hover(),
-        // )
     });
 
     let enable_cameras = if let Some(response) = response {

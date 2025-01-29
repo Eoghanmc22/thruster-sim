@@ -20,6 +20,12 @@ pub enum ShownConfig {
     Index(usize),
 }
 
+#[derive(Resource, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OptimizerStatus {
+    Running,
+    Paused,
+}
+
 #[derive(Resource, Debug, Clone)]
 pub struct TopConfigs {
     pub configs: Vec<OptimizationOutput>,
@@ -30,9 +36,14 @@ pub fn step_accent_points(
     motor_conf: Res<MotorConfigRes>,
     motor_data: Res<MotorDataRes>,
     shown_config: Res<ShownConfig>,
+    status: Res<OptimizerStatus>,
     mut optimizer: ResMut<OptimizerArenaRes>,
     mut best: ResMut<TopConfigs>,
 ) {
+    let OptimizerStatus::Running = *status else {
+        return;
+    };
+
     best.configs.clear();
     for config in optimizer.0.step(&motor_data.0).take(10) {
         best.configs.push(config);
@@ -81,7 +92,7 @@ pub fn handle_reset(
 ) {
     if !reset_event.is_empty() {
         reset_event.clear();
-        info!("Heuristic changed");
+        info!("Reset Optimizer");
 
         optimizer.0.reset(100, score_settings.0.flatten());
         motor_conf.0.score = FloatType::NEG_INFINITY;

@@ -488,7 +488,7 @@ where
                 *breakdown = ascent.score_breakdown.to_float();
 
                 if point.time - point.frontier_threshold.1 > self.frontier_time_limit {
-                    point.done = true;
+                    // point.done = true;
                 }
             }
         }
