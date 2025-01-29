@@ -52,7 +52,7 @@ rand = "0.8"
 motor_math = { git = "https://github.com/Eoghanmc22/mate-rov-2025.git", features = [
   "double_precision",
 ] }
-# motor_math = { path = "../mate-rov-2025/motor_math", features = [
+# motor_math = { path = "../mate/mate-rov-2025/motor_math", features = [
 #   "double_precision",
 # ] }
 stable_hashmap = { git = "https://github.com/Eoghanmc22/mate-rov-2025.git" }

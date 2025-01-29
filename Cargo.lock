@@ -2763,7 +2763,7 @@ dependencies = [
 [[package]]
 name = "motor_math"
 version = "0.1.0"
-source = "git+https://github.com/Eoghanmc22/mate-rov-2025.git#7b7814686392354403c7d0b487eda2ce62eb1d3c"
+source = "git+https://github.com/Eoghanmc22/mate-rov-2025.git#311ac5106f15afe863e73d18fab271fa1434bd3f"
 dependencies = [
  "anyhow",
  "bevy_reflect",
@@ -3943,7 +3943,7 @@ checksum = "a8f112729512f8e442d81f95a8a7ddf2b7c6b8a1a6f509a95864142b30cab2d3"
 [[package]]
 name = "stable_hashmap"
 version = "0.1.0"
-source = "git+https://github.com/Eoghanmc22/mate-rov-2025.git#7b7814686392354403c7d0b487eda2ce62eb1d3c"
+source = "git+https://github.com/Eoghanmc22/mate-rov-2025.git#311ac5106f15afe863e73d18fab271fa1434bd3f"
 dependencies = [
  "ahash",
 ]
