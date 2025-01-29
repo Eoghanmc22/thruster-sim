@@ -5,14 +5,22 @@ use std::fmt::Debug;
 use std::hash::Hash;
 use std::marker::PhantomData;
 
+#[derive(Clone, Copy)]
+pub enum MesType {
+    Equal,
+    AtLeast,
+}
+
 #[derive(Clone)]
 pub struct ScoreSettings {
     pub mes_linear: FloatType,
+    pub mes_linear_type: MesType,
     pub mes_x_off: FloatType,
     pub mes_y_off: FloatType,
     pub mes_z_off: FloatType,
 
     pub mes_torque: FloatType,
+    pub mes_torque_type: MesType,
     pub mes_x_rot_off: FloatType,
     pub mes_y_rot_off: FloatType,
     pub mes_z_rot_off: FloatType,
@@ -49,16 +57,18 @@ impl Default for ScoreSettings {
     fn default() -> Self {
         Self {
             mes_linear: -2.0,
-            mes_x_off: 0.0,
+            mes_linear_type: MesType::AtLeast,
+            mes_x_off: 30.0,
             mes_y_off: 65.0,
-            mes_z_off: 0.0,
-            mes_torque: 0.0,
-            mes_x_rot_off: 0.0,
-            mes_y_rot_off: 0.0,
-            mes_z_rot_off: 0.0,
-            avg_linear: 0.05,
+            mes_z_off: 40.0,
+            mes_torque: -4.0,
+            mes_torque_type: MesType::AtLeast,
+            mes_x_rot_off: 10.0,
+            mes_y_rot_off: 5.0,
+            mes_z_rot_off: 8.0,
+            avg_linear: 0.5,
             avg_torque: 0.8,
-            min_linear: 0.02,
+            min_linear: 0.2,
             min_torque: 0.36,
             x: 0.2,
             y: 0.55,
@@ -141,7 +151,7 @@ impl<D: Number> ScoreResult<D, Unscaled> {
             thruster_flow_exclusion_loss: D::from(settings.thruster_flow_exclusion_loss)
                 * self.thruster_flow_exclusion_loss,
             cardinality_loss: D::from(settings.cardinality_loss) * self.cardinality_loss,
-            phantom: PhantomData::default(),
+            phantom: PhantomData,
         }
     }
 
@@ -198,7 +208,7 @@ impl<D: Number, Type> ScoreResult<D, Type> {
             thruster_exclusion_loss: self.thruster_exclusion_loss.re(),
             thruster_flow_exclusion_loss: self.thruster_flow_exclusion_loss.re(),
             cardinality_loss: self.cardinality_loss.re(),
-            phantom: PhantomData::default(),
+            phantom: PhantomData,
         }
     }
 }
@@ -270,16 +280,24 @@ pub fn score<MotorId: Debug + Ord + Hash + Clone, D: Number>(
         };
         let offset = D::from(offset);
 
-        let (val, _avg) = match axis {
-            Axis::X | Axis::Y | Axis::Z => (*result, avg_linear),
-            Axis::XRot | Axis::YRot | Axis::ZRot => (*result, avg_torque),
+        let (val, _avg, mes_type) = match axis {
+            Axis::X | Axis::Y | Axis::Z => (*result, avg_linear, settings.mes_linear_type),
+            Axis::XRot | Axis::YRot | Axis::ZRot => (*result, avg_torque, settings.mes_torque_type),
         };
 
         let goal = if offset.re() > 0.0 { offset } else { val };
+        let max = match mes_type {
+            MesType::Equal => D::from(FloatType::INFINITY),
+            MesType::AtLeast => D::from(0.0),
+        };
 
         match axis {
-            Axis::X | Axis::Y | Axis::Z => mes_linear += (val - goal) * (val - goal),
-            Axis::XRot | Axis::YRot | Axis::ZRot => mes_torque += (val - goal) * (val - goal),
+            Axis::X | Axis::Y | Axis::Z => {
+                mes_linear += (val - goal).min(max) * (val - goal).min(max)
+            }
+            Axis::XRot | Axis::YRot | Axis::ZRot => {
+                mes_torque += (val - goal).min(max) * (val - goal).min(max)
+            }
         }
     }
 
@@ -370,7 +388,7 @@ pub fn score<MotorId: Debug + Ord + Hash + Clone, D: Number>(
     let dimension = D::from(4.0)
         * (half_extent.x * half_extent.x * half_extent.x * half_extent.x
             + half_extent.y * half_extent.y * half_extent.y * half_extent.y
-            + half_extent.z * half_extent.z * half_extent.z * half_extent.z);
+            + half_extent.z * half_extent.z * half_extent.z * half_extent.z * D::from(1000.0));
 
     let strongest_dir = average_direction.normalize();
     let cardinality_loss = strongest_dir.norm() - strongest_dir.abs().max();

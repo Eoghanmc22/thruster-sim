@@ -1,14 +1,16 @@
 use motor_math::FloatType;
-use thruster_sim::heuristic::ScoreSettings;
+use thruster_sim::heuristic::{MesType, ScoreSettings};
 
 #[derive(Clone)]
 pub struct ToggleableScoreSettings {
     pub mes_linear: (bool, FloatType),
+    pub mes_linear_type: MesType,
     pub mes_x_off: (bool, FloatType),
     pub mes_y_off: (bool, FloatType),
     pub mes_z_off: (bool, FloatType),
 
     pub mes_torque: (bool, FloatType),
+    pub mes_torque_type: MesType,
     pub mes_x_rot_off: (bool, FloatType),
     pub mes_y_rot_off: (bool, FloatType),
     pub mes_z_rot_off: (bool, FloatType),
@@ -47,6 +49,7 @@ impl ToggleableScoreSettings {
             } else {
                 0.0
             },
+            mes_linear_type: self.mes_linear_type,
             mes_x_off: if self.mes_x_off.0 {
                 self.mes_x_off.1
             } else {
@@ -67,6 +70,7 @@ impl ToggleableScoreSettings {
             } else {
                 0.0
             },
+            mes_torque_type: self.mes_torque_type,
             mes_x_rot_off: if self.mes_x_rot_off.0 {
                 self.mes_x_rot_off.1
             } else {
@@ -169,10 +173,12 @@ impl Default for ToggleableScoreSettings {
 
         Self {
             mes_linear: (true, base.mes_linear),
+            mes_linear_type: base.mes_linear_type,
             mes_x_off: (true, base.mes_x_off),
             mes_y_off: (true, base.mes_y_off),
             mes_z_off: (true, base.mes_z_off),
-            mes_torque: (false, base.mes_torque),
+            mes_torque: (true, base.mes_torque),
+            mes_torque_type: base.mes_torque_type,
             mes_x_rot_off: (true, base.mes_x_rot_off),
             mes_y_rot_off: (true, base.mes_y_rot_off),
             mes_z_rot_off: (true, base.mes_z_rot_off),
@@ -180,12 +186,12 @@ impl Default for ToggleableScoreSettings {
             avg_torque: (true, base.avg_torque),
             min_linear: (true, base.min_linear),
             min_torque: (true, base.min_torque),
-            x: (false, base.x),
-            y: (false, base.y),
-            z: (false, base.z),
-            x_rot: (false, base.x_rot),
-            y_rot: (false, base.y_rot),
-            z_rot: (false, base.z_rot),
+            x: (true, base.x),
+            y: (true, base.y),
+            z: (true, base.z),
+            x_rot: (true, base.x_rot),
+            y_rot: (true, base.y_rot),
+            z_rot: (true, base.z_rot),
             center_of_mass_loss: (true, base.center_of_mass_loss),
             center_loss: (true, base.center_loss),
             surface_area_loss: (true, base.surface_area_score),

@@ -7,6 +7,7 @@ use bevy_egui::{
 };
 use bevy_panorbit_camera::PanOrbitCamera;
 use motor_math::solve::reverse;
+use thruster_sim::heuristic::MesType;
 
 use crate::{motor_config::MotorConfigRes, MotorDataRes};
 
@@ -29,18 +30,26 @@ pub fn render_gui(
         ui.collapsing("Instances", |ui| {
             let mut shown = *shown_config;
 
-            match *status {
-                OptimizerStatus::Running => {
-                    if ui.button("Pause").clicked() {
-                        *status = OptimizerStatus::Paused;
+            ui.horizontal(|ui| {
+                if ui.button("Reset").clicked() {
+                    commands.add(|world: &mut World| {
+                        world.send_event(ResetEvent);
+                    });
+                }
+
+                match *status {
+                    OptimizerStatus::Running => {
+                        if ui.button("Pause").clicked() {
+                            *status = OptimizerStatus::Paused;
+                        }
+                    }
+                    OptimizerStatus::Paused => {
+                        if ui.button("Resume").clicked() {
+                            *status = OptimizerStatus::Running;
+                        }
                     }
                 }
-                OptimizerStatus::Paused => {
-                    if ui.button("Resume").clicked() {
-                        *status = OptimizerStatus::Running;
-                    }
-                }
-            }
+            });
 
             ui.selectable_value(&mut shown, ShownConfig::Best, "Always Best");
             for config in &best.configs {
@@ -62,12 +71,6 @@ pub fn render_gui(
             let mut updated = false;
 
             let text_width = 200.0;
-
-            if ui.button("Reset").clicked() {
-                commands.add(|world: &mut World| {
-                    world.send_event(ResetEvent);
-                });
-            }
 
             ui.horizontal(|ui| {
                 let check = ui.checkbox(&mut settings.mes_linear.0, "MES Linear");
@@ -98,6 +101,21 @@ pub fn render_gui(
             });
 
             ui.collapsing("MES Linear Goals", |ui| {
+                match settings.mes_linear_type {
+                    MesType::AtLeast => {
+                        if ui.button("At least").clicked() {
+                            settings.mes_linear_type = MesType::Equal;
+                            updated = true;
+                        }
+                    }
+                    MesType::Equal => {
+                        if ui.button("Equal").clicked() {
+                            settings.mes_linear_type = MesType::AtLeast;
+                            updated = true;
+                        }
+                    }
+                }
+
                 ui.horizontal(|ui| {
                     let check = ui.checkbox(&mut settings.mes_x_off.0, "X");
                     let width = check.rect.width();
@@ -142,6 +160,21 @@ pub fn render_gui(
             });
 
             ui.collapsing("MES Torque Goals", |ui| {
+                match settings.mes_torque_type {
+                    MesType::AtLeast => {
+                        if ui.button("At least").clicked() {
+                            settings.mes_torque_type = MesType::Equal;
+                            updated = true;
+                        }
+                    }
+                    MesType::Equal => {
+                        if ui.button("Equal").clicked() {
+                            settings.mes_torque_type = MesType::AtLeast;
+                            updated = true;
+                        }
+                    }
+                }
+
                 ui.horizontal(|ui| {
                     let check = ui.checkbox(&mut settings.mes_x_rot_off.0, "X");
                     let width = check.rect.width();
@@ -501,11 +534,14 @@ pub fn render_gui(
             ui.allocate_space((ui.available_width(), 0.0).into());
         });
 
-        ui.collapsing("Parameters", |ui| {
-            ui.label(format!("{}", motor_conf.0.parameters));
-
-            ui.allocate_space((ui.available_width(), 0.0).into());
-        });
+        if ui.button("Print Parameters").clicked() {
+            println!("{}", motor_conf.0.parameters);
+        }
+        // ui.collapsing("Parameters", |ui| {
+        //     ui.label(format!("{}", motor_conf.0.parameters));
+        //
+        //     ui.allocate_space((ui.available_width(), 0.0).into());
+        // });
     });
 
     let enable_cameras = if let Some(response) = response {

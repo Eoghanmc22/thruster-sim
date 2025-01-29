@@ -40,13 +40,11 @@ pub fn step_accent_points(
     mut optimizer: ResMut<OptimizerArenaRes>,
     mut best: ResMut<TopConfigs>,
 ) {
-    let OptimizerStatus::Running = *status else {
-        return;
-    };
-
-    best.configs.clear();
-    for config in optimizer.0.step(&motor_data.0).take(10) {
-        best.configs.push(config);
+    if let OptimizerStatus::Running = *status {
+        best.configs.clear();
+        for config in optimizer.0.step(&motor_data.0).take(10) {
+            best.configs.push(config);
+        }
     }
 
     let current_score = motor_conf.0.score;

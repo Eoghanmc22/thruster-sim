@@ -52,7 +52,7 @@ fn main() {
             }),
             PanOrbitCameraPlugin,
             EguiPlugin,
-            LogDiagnosticsPlugin::default(),
+            // LogDiagnosticsPlugin::default(),
             FrameTimeDiagnosticsPlugin,
         ))
         .insert_gizmo_config(
