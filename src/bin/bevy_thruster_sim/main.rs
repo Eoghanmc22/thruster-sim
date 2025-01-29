@@ -3,6 +3,9 @@ pub mod mesh;
 pub mod motor_config;
 pub mod optimizer;
 
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+use std::panic;
+
 use bevy::{
     diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
     prelude::*,
@@ -36,7 +39,7 @@ fn main() {
     #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
     let motor_data = {
         panic::set_hook(Box::new(console_error_panic_hook::hook));
-        motor_preformance::read_motor_data_from_string(include_str!("../motor_data.csv"))
+        motor_preformance::read_motor_data_from_string(include_str!("../../../motor_data.csv"))
             .expect("Read motor data")
     };
 

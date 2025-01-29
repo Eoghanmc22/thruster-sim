@@ -31,7 +31,7 @@ jobs: # here we are specifing all of the jobs
       - name: Install alsa and udev
         run: sudo apt-get update; sudo apt-get install --no-install-recommends libasound2-dev libudev-dev
       - name: Build
-        run: cargo build --bin bevy_thruster_sim --target wasm32-unknown-unknown --profile web && wasm-bindgen --out-dir ./out/ --target web ./target/wasm32-unknown-unknown/web/thruster-sim.wasm
+        run: cargo build --bin bevy_thruster_sim --target wasm32-unknown-unknown --profile web && wasm-bindgen --out-dir ./out/ --target web ./target/wasm32-unknown-unknown/web/bevy_thruster_sim.wasm
       - name: Optimize
         uses: NiklasEi/wasm-opt-action@v2
         with:

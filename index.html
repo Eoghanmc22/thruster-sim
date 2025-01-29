@@ -1,14 +1,14 @@
 <!doctype html>
 <html lang="en">
 
-  <head>
-    <meta charset="UTF-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="icon" href="data:,">
-    <title>Thruster Sim</title>
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="data:,">
+  <title>Thruster Sim</title>
 
-    <style>
+  <style>
     body,
     html {
       margin: 0;
@@ -25,21 +25,21 @@
     canvas:focus {
       outline: none;
     }
-    </style>
-  </head>
+  </style>
+</head>
 
-  <body style="margin: 0px;">
-    <script type="module">
-    import init from './thruster-sim.js'
+<body style="margin: 0px;">
+  <script type="module">
+    import init from './bevy_thruster_sim.js'
 
     init().catch((error) => {
       if (!error.message.startsWith("Using exceptions for control flow, don't mind me. This isn't actually an error!")) {
         throw error;
       }
     });
-    </script>
+  </script>
 
-    <script>
+  <script>
     document.body.addEventListener("contextmenu", (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -107,8 +107,7 @@
         document.addEventListener(eventName, resumeAllContexts);
       });
     })();
-    </script>
-  </body>
+  </script>
+</body>
 
 </html>
-
