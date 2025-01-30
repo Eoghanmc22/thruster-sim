@@ -163,7 +163,10 @@ fn setup(
             }),
             ..default()
         },
-        PanOrbitCamera::default(),
+        PanOrbitCamera {
+            pan_sensitivity: 0.0,
+            ..default()
+        },
         RenderLayers::layer(0),
         CameraPos::LeftTop,
     ));
@@ -182,7 +185,10 @@ fn setup(
             },
             ..default()
         },
-        PanOrbitCamera::default(),
+        PanOrbitCamera {
+            pan_sensitivity: 0.0,
+            ..default()
+        },
         RenderLayers::layer(1),
         CameraPos::RightTop,
     ));
@@ -201,7 +207,10 @@ fn setup(
             },
             ..default()
         },
-        PanOrbitCamera::default(),
+        PanOrbitCamera {
+            pan_sensitivity: 0.0,
+            ..default()
+        },
         RenderLayers::layer(2),
         CameraPos::RightBottom,
     ));
@@ -220,7 +229,10 @@ fn setup(
             },
             ..default()
         },
-        PanOrbitCamera::default(),
+        PanOrbitCamera {
+            pan_sensitivity: 0.0,
+            ..default()
+        },
         RenderLayers::layer(3),
         CameraPos::LeftBottom,
     ));

@@ -564,7 +564,7 @@ pub fn render_gui(
         });
 
         if ui.button("Print Parameters").clicked() {
-            println!("{}", motor_conf.0.parameters);
+            info!("{}", motor_conf.0.parameters);
         }
         // ui.collapsing("Parameters", |ui| {
         //     ui.label(format!("{}", motor_conf.0.parameters));
