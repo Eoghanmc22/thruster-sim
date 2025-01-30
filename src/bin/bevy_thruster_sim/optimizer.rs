@@ -92,7 +92,11 @@ pub fn handle_reset(
         reset_event.clear();
         info!("Reset Optimizer");
 
+        #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
         optimizer.0.reset(100, score_settings.0.flatten());
+        #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+        optimizer.0.reset(10, score_settings.0.flatten());
+
         motor_conf.0.score = FloatType::NEG_INFINITY;
     }
 }
