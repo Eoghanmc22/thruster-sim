@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use bevy::prelude::*;
 use motor_math::FloatType;
 use settings::ToggleableScoreSettings;
@@ -52,7 +54,10 @@ pub struct TopConfigs {
     pub configs: Vec<OptimizationOutput>,
 }
 
+const MIN_DURATION: Duration = Duration::from_millis(500);
+
 pub fn step_accent_points(
+    mut debounce_timer: Local<Duration>,
     mut commands: Commands,
     motor_conf: Res<MotorConfigRes>,
     motor_data: Res<MotorDataRes>,
@@ -60,6 +65,7 @@ pub fn step_accent_points(
     status: Res<OptimizerStatus>,
     mut optimizer: ResMut<OptimizerArenaRes>,
     mut best: ResMut<TopConfigs>,
+    time: Res<Time>,
 ) {
     if let OptimizerStatus::Running = *status {
         best.configs.clear();
@@ -72,9 +78,20 @@ pub fn step_accent_points(
     match *shown_config {
         ShownConfig::Best => {
             if let Some(best) = best.configs.first() {
-                // if shown_config.is_changed() || best.score - current_score > 0.001 {
-                commands.insert_resource(MotorConfigRes(best.clone()));
-                // }
+                if motor_conf.0.idx == best.idx
+                    || shown_config.is_changed()
+                    || (best.score - current_score > 0.2
+                        && time.elapsed() - *debounce_timer > MIN_DURATION)
+                {
+                    commands.insert_resource(MotorConfigRes(best.clone()));
+                    *debounce_timer = time.elapsed();
+                } else if let Some(current) = optimizer.0.lookup_index(motor_conf.0.idx) {
+                    commands.insert_resource(MotorConfigRes(current));
+                }
+
+                if motor_conf.0.idx == best.idx {
+                    *debounce_timer = time.elapsed();
+                }
             }
         }
         ShownConfig::Index(idx) => {

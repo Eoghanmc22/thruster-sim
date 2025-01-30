@@ -436,7 +436,7 @@ impl<Config: OptimizableConfig> SyncOptimizationArena<Config> {
             config,
             heuristic: ScoreSettings::default(),
             points: vec![],
-            step_size: 0.005,
+            step_size: 0.002,
             frontier_ratio_threshold: 1.01,
             frontier_time_limit: 25,
         }
@@ -548,7 +548,7 @@ impl<Config: OptimizableConfig> AsyncOptimizationArena<Config> {
             config,
             heuristic: ScoreSettings::default(),
             points: vec![],
-            step_size: 0.005,
+            step_size: 0.002,
             frontier_ratio_threshold: 1.01,
             frontier_time_limit: 25,
         }

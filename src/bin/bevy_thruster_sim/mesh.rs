@@ -22,12 +22,18 @@ pub enum StrengthMesh {
     Torque,
 }
 
+#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+const MESH_DETAIL: usize = 5;
+
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+const MESH_DETAIL: usize = 4;
+
 pub fn make_strength_mesh(
     motor_config: &MotorConfig<ErasedMotorId, FloatType>,
     motor_data: &MotorData,
     mesh_type: StrengthMesh,
 ) -> Mesh {
-    let generated = IcoSphere::new(5, |point| {
+    let generated = IcoSphere::new(MESH_DETAIL, |point| {
         let movement = match mesh_type {
             StrengthMesh::Force => Movement {
                 force: Vector3::from(point.normalize()).cast::<FloatType>(),
@@ -42,7 +48,7 @@ pub fn make_strength_mesh(
         let forces = reverse::reverse_solve(movement, motor_config);
         let motor_cmds = reverse::forces_to_cmds(forces, motor_config, motor_data);
         let ratio =
-            reverse::binary_search_force_ratio(&motor_cmds, motor_config, motor_data, 25.0, 0.001);
+            reverse::binary_search_force_ratio(&motor_cmds, motor_config, motor_data, 25.0, 0.01);
         // let ratio = 1.0;
 
         let type_ratio = match mesh_type {
