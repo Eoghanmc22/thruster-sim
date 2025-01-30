@@ -11,7 +11,9 @@ use thruster_sim::heuristic::MesType;
 
 use crate::{motor_config::MotorConfigRes, MotorDataRes};
 
-use super::{OptimizerStatus, ResetEvent, ScoreSettingsRes, ShownConfig, TopConfigs};
+use super::{
+    ArenaMode, ArenaType, OptimizerStatus, ResetEvent, ScoreSettingsRes, ShownConfig, TopConfigs,
+};
 
 pub fn render_gui(
     mut commands: Commands,
@@ -23,6 +25,7 @@ pub fn render_gui(
     mut shown_config: ResMut<ShownConfig>,
     best: Res<TopConfigs>,
     mut status: ResMut<OptimizerStatus>,
+    mut arena: ResMut<ArenaMode>,
 ) {
     let response = egui::Window::new("Motor Config").show(contexts.ctx_mut(), |ui| {
         ui.set_width(250.0);
@@ -62,6 +65,32 @@ pub fn render_gui(
 
             if shown != *shown_config {
                 *shown_config = shown;
+            }
+        });
+
+        ui.collapsing("Optimization Arena", |ui| {
+            let mut arena_mode = *arena;
+
+            ui.menu_button("Optimization Type", |ui| {
+                ui.selectable_value(
+                    &mut arena_mode.arena_type,
+                    ArenaType::Symmetrical3,
+                    "Symmetrical",
+                );
+                ui.selectable_value(
+                    &mut arena_mode.arena_type,
+                    ArenaType::Unconstrained6,
+                    "Unconstrained",
+                );
+                ui.selectable_value(&mut arena_mode.arena_type, ArenaType::X3d, "X3d");
+            });
+
+            ui.add(Slider::new(&mut arena_mode.point_count, 0..=1000).text("Point Count"));
+
+            ui.checkbox(&mut arena_mode.is_async, "Async Optimizer");
+
+            if arena_mode != *arena {
+                *arena = arena_mode;
             }
         });
 

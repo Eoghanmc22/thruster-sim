@@ -22,10 +22,12 @@ use motor_math::{
     Direction, FloatType, Motor, MotorConfig,
 };
 use nalgebra::{vector, DMatrix};
-use optimizer::{gui::render_gui, handle_reset, OptimizerStatus, ShownConfig, TopConfigs};
+use optimizer::{
+    gui::render_gui, handle_reset, ArenaMode, ArenaType, OptimizerStatus, ShownConfig, TopConfigs,
+};
 use optimizer::{handle_heuristic_change, step_accent_points, OptimizerArenaRes, ScoreSettingsRes};
 use optimizer::{settings::ToggleableScoreSettings, ResetEvent};
-use thruster_sim::optimize::symetrical::SymerticalOptimization;
+use thruster_sim::optimize::{symetrical::SymerticalOptimization, x3d_fixed::FixedX3dOptimization};
 use thruster_sim::optimize::{AsyncOptimizationArena, OptimizationOutput};
 use thruster_sim::{HEIGHT, LENGTH, WIDTH};
 
@@ -68,14 +70,16 @@ fn main() {
         .init_gizmo_group::<ThrustGizmo>()
         .insert_resource(ScoreSettingsRes(ToggleableScoreSettings::default()))
         .insert_resource(OptimizerArenaRes(Box::new(AsyncOptimizationArena::new(
-            // FullOptimization::<6>,
             SymerticalOptimization::<3>,
-            // FixedX3dOptimization {
-            //     width: WIDTH / 2.0,
-            //     length: LENGTH / 2.0,
-            //     height: HEIGHT / 2.0,
-            // },
         ))))
+        .insert_resource(ArenaMode {
+            arena_type: ArenaType::Symmetrical3,
+            is_async: true,
+            #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+            point_count: 100,
+            #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+            point_count: 10,
+        })
         .insert_resource(MotorDataRes(motor_data))
         .insert_resource(ClearColor(Color::WHITE))
         .insert_resource(ShownConfig::Best)
