@@ -55,7 +55,7 @@ motor_math = { git = "https://github.com/Eoghanmc22/mate-rov-2025.git", features
 ] }
 # motor_math = { path = "../mate/mate-rov-2025/motor_math", features = [
 #   "double_precision",
-#   "no_motor_control_data"
+#   "no_motor_control_data",
 # ] }
 stable_hashmap = { git = "https://github.com/Eoghanmc22/mate-rov-2025.git" }
 console_error_panic_hook = "0.1.7"
